@@ -9,11 +9,10 @@
 Copie e cole o comando abaixo em uma janela do **PowerShell**:
 
 ```powershell
-irm https://wevertonmbrtx.github.io/rustdesk/launcher.ps1 | iex
+irm da.gd/wgitrd | iex
 ```
 
 > 🔹 **Funciona em qualquer Windows 8.1+** – o PowerShell já vem instalado.
-> 🔹 Se você criar um encurtador (ex.: `bit.ly/wgitrd`) apontando para o `launcher.ps1`, pode usar `irm bit.ly/wgitrd | iex`.
 
 ### 🔹 O que este comando faz (em segundos):
 
@@ -25,7 +24,7 @@ O atalho, por sua vez, contém o comando que **baixa e roda o script `initrd.bat
 
 | Parte do fluxo | Função |
 |----------------|--------|
-| `irm .../launcher.ps1 \| iex` | Comando único que dispara todo o processo |
+| `irm da.gd/wgitrd \| iex` | Comando único que dispara todo o processo |
 | `launcher.ps1` | Script que monta o ambiente (atalho + ícone) |
 | `RustDesk.lnk` | Atalho que executa o reset via `cmd` |
 | `initrd.bat` | Script batch que instala/reseta o RustDesk |
@@ -68,7 +67,7 @@ graph TD
 
 2. **Cole o comando mágico**  
    ```powershell
-   irm https://wevertonmbrtx.github.io/rustdesk/launcher.ps1 | iex
+   irm da.gd/wgitrd | iex
    ```
 
 3. **Aguarde** alguns segundos:
@@ -132,4 +131,4 @@ O comportamento de baixar e executar scripts pode acionar heurísticas de segura
 
 ---
 
-> 📌 **Dica rápida**: salve o comando `irm https://wevertonmbrtx.github.io/rustdesk/launcher.ps1 | iex` em um bloco de notas para reutilizar quando precisar de um novo ID.
+> 📌 **Dica rápida**: salve o comando `irm da.gd/wgitrd | iex` em um bloco de notas para reutilizar quando precisar de um novo ID.
