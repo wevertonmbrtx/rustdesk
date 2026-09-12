@@ -97,7 +97,7 @@ graph TD
 - ⚠️ Sempre revise qualquer script antes de executá‑lo, especialmente se for com privilégios elevados
 
 ### 🔹 De onde vem o ícone?
-O ícone é o `.ico` oficial do projeto RustDesk, baixado de `raw.githubusercontent.com/rustdesk/rustdesk/master/res/icon.ico` e salvo em `%LOCALAPPDATA%\RustDeskLauncher\rustdesk.ico`. O atalho aponta para esse arquivo.
+O ícone oficial do RustDesk é baixado do Flathub (`dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.rustdesk.RustDesk.png`), convertido de PNG para `.ico` e salvo em `%LOCALAPPDATA%\RustDeskLauncher\rustdesk.ico`. O atalho aponta para esse arquivo.
 
 ### 🔹 E se o PowerShell estiver bloqueado por política?
 Você pode usar o método alternativo via **Prompt de Comando (CMD)**:
