@@ -14,6 +14,7 @@ set "sys=%SystemRoot%\System32"
 
 set "insPath0=%ProgramFiles%\RustDesk\rustdesk.exe"
 set "insPath1=%ProgramFiles(x86)%\RustDesk\rustdesk.exe"
+set "insPath2=%LOCALAPPDATA%\RustDesk\rustdesk.exe"
 set "porPath0=%TEMP%\rustdesk.exe"
 
 set "selfPath=%TEMP%\initrd.bat"
@@ -79,9 +80,6 @@ if defined _exe (
     if not defined _exe goto :fail
 )
 
-sc query "%service%" >nul 2>&1
-if errorlevel 1 goto :fail
-
 del /f /q "%porPath0%" >nul 2>&1
 call :reset_id
 if errorlevel 1 goto :fail
@@ -103,12 +101,15 @@ goto :eof
 set "_exe="
 if exist "%insPath0%" set "_exe=%insPath0%"
 if not defined _exe if exist "%insPath1%" set "_exe=%insPath1%"
+if not defined _exe if exist "%insPath2%" set "_exe=%insPath2%"
 exit /b 0
 
 
 :reset_id
 echo Stopping RustDesk...
-sc stop "%service%" >nul 2>&1
+set "_hasSvc="
+sc query "%service%" >nul 2>&1 && set "_hasSvc=1"
+if defined _hasSvc sc stop "%service%" >nul 2>&1
 taskkill /f /im "rustdesk.exe" >nul 2>&1
 timeout /t 2 >nul
 
@@ -118,8 +119,10 @@ rd /s /q "%cfgSvc2%" 2>nul
 
 cls
 echo Initializing RustDesk...
-sc start "%service%" >nul 2>&1
-call :wait_service_registered
+if defined _hasSvc (
+    sc start "%service%" >nul 2>&1
+    call :wait_service_registered
+)
 call :show_id
 exit /b 0
 
