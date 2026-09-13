@@ -92,12 +92,12 @@ call :open_app
 if errorlevel 1 goto :fail
 
 echo Finished.
-timeout /t 2 >nul
+timeout /t 1 >nul
 goto :eof
 
 :fail
 echo RustDesk can not be opened.
-timeout /t 2 >nul
+timeout /t 1 >nul
 goto :eof
 
 
@@ -126,7 +126,7 @@ set "_hasSvc="
 sc query "%service%" >nul 2>&1 && set "_hasSvc=1"
 if defined _hasSvc sc stop "%service%" >nul 2>&1
 taskkill /f /im "rustdesk.exe" >nul 2>&1
-timeout /t 2 >nul
+timeout /t 1 >nul
 
 rd /s /q "%cfgUser%" 2>nul
 rd /s /q "%cfgSvc1%" 2>nul
@@ -193,7 +193,7 @@ call :wait_service_registered
 
 :_wip_cleanup
 taskkill /f /im "rustdesk.exe" >nul 2>&1
-timeout /t 2 >nul
+timeout /t 1 >nul
 del /f /q "%porPath0%" 2>nul
 call :detect_install
 if not defined _exe exit /b 1
