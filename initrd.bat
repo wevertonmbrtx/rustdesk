@@ -67,6 +67,8 @@ reg add "HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protoc
 call :check_ps
 if errorlevel 1 goto :eof
 
+call :ask_cleanup
+
 call :create_lnk
 call :detect_install
 
@@ -80,9 +82,11 @@ if defined _exe (
     if not defined _exe goto :fail
 )
 
-del /f /q "%porPath0%" >nul 2>&1
-call :reset_id
-if errorlevel 1 goto :fail
+if not defined _skipClean (
+    del /f /q "%porPath0%" >nul 2>&1
+    call :reset_id
+    if errorlevel 1 goto :fail
+)
 
 call :open_app
 if errorlevel 1 goto :fail
@@ -95,6 +99,17 @@ goto :eof
 echo RustDesk can not be opened.
 timeout /t 2 >nul
 goto :eof
+
+
+:ask_cleanup
+set "_skipClean="
+set "_ask=%TEMP%\_rd_ask.vbs"
+>  "%_ask%" echo WScript.Quit MsgBox("Deseja iniciar sem limpar as configura" ^& Chr(231) ^& Chr(245) ^& "es?", 4+32+4096, "Aviso de limpeza")
+cscript //nologo "%_ask%" >nul 2>&1
+set "_rc=!errorlevel!"
+del /f /q "%_ask%" >nul 2>&1
+if "!_rc!"=="6" set "_skipClean=1"
+exit /b 0
 
 
 :detect_install
