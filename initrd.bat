@@ -159,16 +159,14 @@ exit /b 0
 if not defined _exe exit /b 0
 echo Starting RustDesk service...
 sc query "%service%" >nul 2>&1
-call :_svc_redirect
-if errorlevel 1 goto _svc_direct
+if not errorlevel 1 goto _svc_start
+echo Registering RustDesk service...
+"%_exe%" --install-service >nul 2>&1
+call :wait_service_registered
+:_svc_start
 sc start "%service%" >nul 2>&1
 call :wait_service_running
-if errorlevel 1 goto _svc_direct
-timeout /t 2 >nul & exit /b 0
-
-:_svc_direct
-start "" "%_exe%" --service
-timeout /t 1 >nul & exit /b 0
+exit /b 0
 
 
 :wait_service_running
