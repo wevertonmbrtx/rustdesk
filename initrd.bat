@@ -159,20 +159,21 @@ exit /b 0
 if not defined _exe exit /b 0
 echo Starting RustDesk service...
 sc query "%service%" >nul 2>&1
+call :_svc_redirect
 if errorlevel 1 goto _svc_direct
 sc start "%service%" >nul 2>&1
 call :wait_service_running
 if errorlevel 1 goto _svc_direct
-timeout /t 2 >nul
-exit /b 0
+timeout /t 2 >nul & exit /b 0
+
 :_svc_direct
 start "" "%_exe%" --service
-timeout /t 3 >nul
-exit /b 0
+timeout /t 1 >nul & exit /b 0
 
 
 :wait_service_running
 set /a _c=0
+
 :_wsrun_loop
 sc query "%service%" | "%sys%\find.exe" "RUNNING" >nul 2>&1
 if not errorlevel 1 exit /b 0
@@ -184,6 +185,7 @@ exit /b 1
 
 :wait_service_registered
 set /a _c=0
+
 :_wsr_loop
 sc query "%service%" >nul 2>&1
 if not errorlevel 1 exit /b 0
@@ -219,6 +221,7 @@ echo Installing RustDesk...
 
 echo Waiting installation to finish...
 set /a _c=0
+
 :_wip_loop
 if exist "%insPath0%" goto _wip_check_service
 if exist "%insPath1%" goto _wip_check_service
@@ -384,7 +387,6 @@ echo ERROR: WMF 5.0 installation failed (code %_ec%^).
 echo Make sure Windows 7 SP1 is installed and try again.
 pause
 exit /b 1
-
 
 :_setup_reboot
 if not exist "%selfPath%" copy /y "!batchPath!" "%selfPath%" >nul 2>&1
