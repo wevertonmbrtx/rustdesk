@@ -1,7 +1,6 @@
-param(
-    [ValidateSet('installed', 'portable', 'auto')]
-    [string]$Mode = 'auto',
-    [int]$DoReset = 1
+﻿param(
+    # Arquivo escrito pelo initrd.bat a cada etapa: "inicio;fim;texto;tipo" (tipo = vazio, open ou fail)
+    [string]$StatusFile = (Join-Path $env:TEMP 'rustdesk_progress.txt')
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
@@ -65,16 +64,13 @@ try {
     }
 } catch {}
 
-if ($Mode -eq 'auto') {
-    $p86  = "${env:ProgramFiles(x86)}\RustDesk\rustdesk.exe"
-    $p64  = "$env:ProgramFiles\RustDesk\rustdesk.exe"
-    $pusr = "$env:LOCALAPPDATA\RustDesk\rustdesk.exe"
-    $Mode = if ((Test-Path $p86) -or (Test-Path $p64) -or (Test-Path $pusr)) { 'installed' } else { 'portable' }
-}
+$barWidth = 30
 
-$barWidth = 20
-$confDir  = Join-Path $env:APPDATA 'RustDesk\config'
-$porPath0 = Join-Path $env:TEMP 'rustdesk.exe'
+# Estilo winget: blocos cheios coloridos sobre um trilho cinza.
+# Os dois caracteres existem nas code pages OEM (437/850/860), então não é preciso mudar o encoding.
+$blockFull  = [string][char]0x2588   # █
+$blockEmpty = [string][char]0x2592   # ▒
+$defaultFg  = [Console]::ForegroundColor
 
 function Limit-Text([string]$Text, [int]$MaxLength = $windowCols) {
     if ($null -eq $Text) { return '' }
@@ -82,173 +78,116 @@ function Limit-Text([string]$Text, [int]$MaxLength = $windowCols) {
     return $Text.Substring(0, [math]::Max(0, $MaxLength - 3)) + '...'
 }
 
-function Write-Bar([int]$p, [string]$status = '') {
+function Write-Colored([string]$Text, [ConsoleColor]$Color) {
+    [Console]::ForegroundColor = $Color
+    [Console]::Write($Text)
+}
+
+# Color: Cyan durante o progresso, Green ao concluir, Red em falha.
+function Write-Bar([int]$p, [string]$status = '', [ConsoleColor]$Color = 'Cyan') {
     $f      = [math]::Floor($p * $barWidth / 100)
     $e      = $barWidth - $f
     $status = Limit-Text $status $windowCols
     $host.UI.RawUI.WindowTitle = "RustDesk  $p%"
     try {
         [Console]::SetCursorPosition(0, 0)
-        [Console]::Write(('RustDesk Reset').PadRight($windowCols))
+        Write-Colored ('RustDesk Reset').PadRight($windowCols) White
         [Console]::SetCursorPosition(0, 1)
-        [Console]::Write('[' + ('=' * $f) + ('-' * $e) + ']' + "$p%".PadLeft(5))
+        Write-Colored ($blockFull * $f) $Color
+        Write-Colored ($blockEmpty * $e) DarkGray
+        Write-Colored ("$p%".PadLeft(5)) $Color
         [Console]::SetCursorPosition(0, 2)
-        [Console]::Write($status.PadRight($windowCols))
-    } catch {}
-}
-
-function Test-RustDeskRunning {
-    return [bool](Get-Process -Name 'RustDesk' -ErrorAction SilentlyContinue)
+        Write-Colored $status.PadRight($windowCols) Gray
+    } catch {
+    } finally {
+        [Console]::ForegroundColor = $defaultFg
+    }
 }
 
 function Test-RustDeskWindow {
     $p = Get-Process -Name 'RustDesk' -ErrorAction SilentlyContinue
-    return $p -and ($p | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero })
+    return [bool]($p | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero })
 }
 
-function Test-ServiceStopped {
-    $s = Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue
-    if (-not $s) { return $true }
-    return $s.Status -eq 'Stopped'
+function Read-Status {
+    try {
+        # FileShare ReadWrite: não bloqueia o batch enquanto ele reescreve o arquivo.
+        $fs = [System.IO.File]::Open($StatusFile, 'Open', 'Read', 'ReadWrite, Delete')
+        try { $line = (New-Object System.IO.StreamReader($fs)).ReadLine() } finally { $fs.Dispose() }
+    } catch { return $null }
+
+    if (-not $line) { return $null }
+    $parts = $line.Split(';')
+    if ($parts.Count -lt 3) { return $null }
+    $from = 0; $to = 0
+    if (-not [int]::TryParse($parts[0].Trim(), [ref]$from)) { return $null }
+    if (-not [int]::TryParse($parts[1].Trim(), [ref]$to))   { return $null }
+    $kind = if ($parts.Count -ge 4) { $parts[3].Trim().ToLower() } else { '' }
+    return @{ Raw = $line; From = $from; To = [math]::Max($from, $to); Label = $parts[2].Trim(); Kind = $kind }
 }
 
-function Test-ConfCleared {
-    if (-not (Test-Path $confDir)) { return $true }
-    return -not (Get-ChildItem "$confDir\*.toml" -ErrorAction SilentlyContinue)
-}
-
-function Test-Installed {
-    foreach ($p in @(
-        "$env:ProgramFiles\RustDesk\rustdesk.exe",
-        "${env:ProgramFiles(x86)}\RustDesk\rustdesk.exe",
-        "$env:LOCALAPPDATA\RustDesk\rustdesk.exe"
-    )) {
-        if (Test-Path $p) { return $true }
+function Complete-Bar([double]$from, [string]$label) {
+    for ($p = [int][math]::Floor($from); $p -lt 100; $p += 4) {
+        Write-Bar $p $label
+        Start-Sleep -Milliseconds 15
     }
-    return $false
+    Write-Bar 100 $label Green
 }
 
-function Invoke-Stage {
-    param(
-        [string]$Label,
-        [int]$StartPct,
-        [int]$EndPct,
-        [int]$TimeoutMs,
-        [int]$PollMs,
-        [scriptblock]$DoneCondition,
-        [scriptblock]$RatioProvider
-    )
+$tickMs        = 100
+$openTimeoutMs = 90000     # tempo máximo esperando a janela do RustDesk
+$idleTimeoutMs = 900000    # sem nenhuma atualização do batch por 15 min: desiste
 
-    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+$state   = @{ Raw = ''; From = 0; To = 5; Label = 'Initializing...'; Kind = '' }
+$shown   = 0.0
+$idleSw  = [System.Diagnostics.Stopwatch]::StartNew()
+$openSw  = $null
+$exitRc  = 0
 
-    while ($true) {
-        if (& $DoneCondition) {
-            Write-Bar $EndPct $Label
-            return $true
-        }
-
-        $elapsedMs = [int]$sw.ElapsedMilliseconds
-        if ($elapsedMs -ge $TimeoutMs) {
-            Write-Bar $EndPct $Label
-            return $false
-        }
-
-        $ratio = if ($null -ne $RatioProvider) {
-            [double](& $RatioProvider)
-        } else {
-            [double]$elapsedMs / [double]$TimeoutMs
-        }
-
-        $ratio = [math]::Max(0.0, [math]::Min(0.99, $ratio))
-        $span  = [math]::Max(1, $EndPct - $StartPct)
-        $pct   = [math]::Max($StartPct, [math]::Min($EndPct - 1, [int][math]::Floor($StartPct + $span * $ratio)))
-
-        Write-Bar $pct $Label
-        Start-Sleep -Milliseconds $PollMs
+while ($true) {
+    $s = Read-Status
+    if ($s -and $s.Raw -ne $state.Raw) {
+        $state = $s
+        $idleSw.Restart()
+        if ($state.Kind -eq 'open' -and -not $openSw) { $openSw = [System.Diagnostics.Stopwatch]::StartNew() }
     }
-}
 
-Write-Bar 0 'Initializing...'
+    if ($state.Kind -eq 'fail') {
+        Write-Bar ([int][math]::Floor($shown)) $state.Label Red
+        Start-Sleep -Seconds 4
+        $exitRc = 1
+        break
+    }
 
-# Monta as etapas conforme o que o script REALMENTE vai fazer:
-# portátil (baixar + instalar) e/ou reset (parar + limpar), sempre terminando em abrir.
-$stages = @()
-
-if ($Mode -eq 'portable') {
-    $stages += @{
-        Label   = 'Downloading RustDesk...'
-        Weight  = 35
-        Timeout = 300000
-        Poll    = 400
-        Done    = { (Test-Path $porPath0) -and ((Get-Item $porPath0 -ErrorAction SilentlyContinue).Length -ge 25000000) }
-        Ratio   = {
-            if (-not (Test-Path $porPath0)) { return 0.0 }
-            [math]::Min(0.99, [double](Get-Item $porPath0 -ErrorAction SilentlyContinue).Length / 45000000)
+    if ($state.Kind -eq 'open') {
+        if (Test-RustDeskWindow) {
+            Complete-Bar $shown 'Done.'
+            Start-Sleep -Milliseconds 1200
+            break
+        }
+        if ($openSw.ElapsedMilliseconds -ge $openTimeoutMs) {
+            Write-Bar ([int][math]::Floor($shown)) 'RustDesk did not open.' Red
+            Start-Sleep -Seconds 4
+            $exitRc = 1
+            break
         }
     }
-    $stages += @{
-        Label   = 'Installing RustDesk...'
-        Weight  = 25
-        Timeout = 180000
-        Poll    = 500
-        Done    = { Test-Installed }
-        Ratio   = $null
+
+    if ($idleSw.ElapsedMilliseconds -ge $idleTimeoutMs) { $exitRc = 1; break }
+
+    # A barra nunca volta: alcança rápido o início da etapa atual e depois
+    # avança devagar em direção ao fim dela, sem nunca chegar enquanto a etapa não termina.
+    if ($shown -lt $state.From) {
+        $shown = [math]::Min([double]$state.From, $shown + [math]::Max(1.0, ($state.From - $shown) * 0.3))
+    } elseif ($shown -lt $state.To) {
+        $shown += ($state.To - $shown) * 0.02
     }
+    $shown = [math]::Min(99.0, $shown)
+
+    Write-Bar ([int][math]::Floor($shown)) $state.Label
+    Start-Sleep -Milliseconds $tickMs
 }
 
-if ($DoReset -ne 0) {
-    if ($Mode -eq 'installed') {
-        $stages += @{
-            Label   = 'Stopping RustDesk...'
-            Weight  = 18
-            Timeout = 30000
-            Poll    = 400
-            Done    = { (-not (Test-RustDeskRunning)) -and (Test-ServiceStopped) }
-            Ratio   = $null
-        }
-    }
-    $stages += @{
-        Label   = 'Clearing configuration...'
-        Weight  = 12
-        Timeout = 20000
-        Poll    = 300
-        Done    = { Test-ConfCleared }
-        Ratio   = $null
-    }
-}
-
-$stages += @{
-    Label   = 'Opening RustDesk...'
-    Weight  = 30
-    Timeout = 120000
-    Poll    = 400
-    Done    = { Test-RustDeskWindow }
-    Ratio   = $null
-}
-
-# Distribui 0-100% entre as etapas ativas, proporcional ao peso.
-$totalWeight = ($stages | ForEach-Object { $_.Weight } | Measure-Object -Sum).Sum
-$acc = 0
-for ($i = 0; $i -lt $stages.Count; $i++) {
-    $st    = $stages[$i]
-    $start = [int][math]::Floor($acc * 100 / $totalWeight)
-    $acc  += $st.Weight
-    if ($i -eq $stages.Count - 1) {
-        $end = 100
-    } else {
-        $end = [int][math]::Floor($acc * 100 / $totalWeight)
-    }
-    if ($end -le $start) { $end = $start + 1 }
-    Invoke-Stage $st.Label $start $end $st.Timeout $st.Poll $st.Done $st.Ratio | Out-Null
-}
-
-# Só finaliza quando a janela do RustDesk realmente aparecer.
-while (-not (Test-RustDeskWindow)) {
-    Write-Bar 99 'Opening RustDesk...'
-    Start-Sleep -Milliseconds 400
-}
-
-Write-Bar 100 'Done.'
-Start-Sleep -Milliseconds 1200
+Remove-Item $StatusFile -Force -ErrorAction SilentlyContinue
 [Console]::CursorVisible = $true
-exit 0
+exit $exitRc

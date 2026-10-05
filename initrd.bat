@@ -19,6 +19,10 @@ set "porPath0=%TEMP%\rustdesk.exe"
 
 set "selfPath=%TEMP%\initrd.bat"
 set "progPath=%TEMP%\progress.ps1"
+set "statPath=%TEMP%\rustdesk_progress.txt"
+set /a _pb=0
+set /a _os=0
+set "_rdId="
 set "selfUrl=https://wevertonmbrtx.github.io/rustdesk/initrd.bat"
 set "progUrl=https://wevertonmbrtx.github.io/rustdesk/progress.ps1"
 
@@ -71,21 +75,19 @@ call :ask_cleanup
 
 call :create_lnk
 call :detect_install
+call :start_progress
 
-if defined _exe (
-    call :start_progress installed
-) else (
-    call :start_progress portable
+if not defined _exe (
     call :install_rustdesk
     if errorlevel 1 goto :fail
     call :detect_install
     if not defined _exe goto :fail
+    set /a _pb=50
 )
 
 if not defined _skipClean (
     del /f /q "%porPath0%" >nul 2>&1
     call :reset_id
-    if errorlevel 1 goto :fail
 )
 
 call :ensure_service
@@ -99,8 +101,16 @@ goto :eof
 
 :fail
 echo RustDesk can not be opened.
+call :stage 0 0 "RustDesk can not be opened." fail
 timeout /t 1 >nul
 goto :eof
+
+
+:stage
+rem %1/%2 = inicio/fim da etapa em %% do intervalo restante (_pb..100), %3 = texto, %4 = open/fail
+set /a "_sf=_pb + %~1 * (100 - _pb) / 100", "_st=_pb + %~2 * (100 - _pb) / 100"
+> "%statPath%" echo !_sf!;!_st!;%~3;%~4
+exit /b 0
 
 
 :ask_cleanup
@@ -140,24 +150,29 @@ exit /b 0
 
 :reset_id
 echo Stopping RustDesk...
+call :stage 0 10 "Stopping RustDesk..."
 set "_hasSvc="
 sc query "%service%" >nul 2>&1 && set "_hasSvc=1"
 if defined _hasSvc sc stop "%service%" >nul 2>&1
 taskkill /f /im "rustdesk.exe" >nul 2>&1
 timeout /t 1 >nul
 
+echo Clearing configuration...
+call :stage 10 20 "Clearing configuration..."
 rd /s /q "%cfgUser%" 2>nul
 rd /s /q "%cfgSvc1%" 2>nul
 rd /s /q "%cfgSvc2%" 2>nul
 
 cls
 echo Initializing RustDesk...
+set /a _os=20
 exit /b 0
 
 
 :ensure_service
 if not defined _exe exit /b 0
 echo Starting RustDesk service...
+call :stage !_os! 70 "Starting RustDesk service..."
 sc query "%service%" >nul 2>&1
 if not errorlevel 1 goto _svc_start
 echo Registering RustDesk service...
@@ -195,15 +210,26 @@ exit /b 1
 
 :show_id
 if not defined _exe exit /b 0
+call :stage 70 85 "Reading ID..."
+set /a _os=85
 set "_rdId="
 for /f "usebackq delims=" %%i in (`"%_exe%" --get-id 2^>nul`) do set "_rdId=%%i"
-if defined _rdId echo ID: !_rdId!
+if defined _rdId (
+    echo ID: !_rdId!
+    call :stage 85 85 "ID: !_rdId!"
+    timeout /t 2 >nul
+)
 exit /b 0
 
 
 :open_app
 if not defined _exe exit /b 1
 if not exist "%_exe%" exit /b 1
+if defined _rdId (
+    call :stage !_os! 99 "ID !_rdId! - Opening RustDesk..." open
+) else (
+    call :stage !_os! 99 "Opening RustDesk..." open
+)
 start "" "%_exe%"
 exit /b 0
 
@@ -211,10 +237,12 @@ exit /b 0
 :install_rustdesk
 call :get_rustdesk_url
 echo Downloading RustDesk !_rdVer! (!_arch!)...
+call :stage 0 30 "Downloading RustDesk !_rdVer!..."
 call :download "!_rdUrl!" "%porPath0%"
 if errorlevel 1 exit /b 1
 
 echo Installing RustDesk...
+call :stage 30 50 "Installing RustDesk..."
 "%porPath0%" --silent-install
 
 echo Waiting installation to finish...
@@ -287,11 +315,10 @@ exit /b 0
 
 
 :start_progress
-set "_doReset=1"
-if defined _skipClean set "_doReset=0"
+call :stage 0 5 "Initializing..."
 del /f /q "%progPath%" >nul 2>&1
 call :download "%progUrl%" "%progPath%"
-if exist "%progPath%" start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File "%progPath%" -Mode %~1 -DoReset %_doReset%
+if exist "%progPath%" start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File "%progPath%" -StatusFile "%statPath%"
 exit /b 0
 
 
