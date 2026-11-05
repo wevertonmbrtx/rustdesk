@@ -1,4 +1,11 @@
 @echo off
+rem Num Windows 64 bits, um programa 32 bits (ex.: o PowerShell x86) abre o cmd 32 bits, e nele o
+rem System32, o Program Files e o registro sao redirecionados para as versoes 32 bits.
+rem Reabre o script no cmd nativo, com os mesmos argumentos. O Sysnative so existe para 32 bits.
+if defined PROCESSOR_ARCHITEW6432 if exist "%SystemRoot%\Sysnative\cmd.exe" (
+    "%SystemRoot%\Sysnative\cmd.exe" /c ""%~f0" %*"
+    exit /b
+)
 cls
 title RustDesk
 mode con:cols=70 lines=27
@@ -30,13 +37,30 @@ set "cfgUser=%APPDATA%\RustDesk\config"
 set "cfgSvc1=%WINDIR%\ServiceProfile\LocalService\AppData\Roaming\RustDesk\config"
 set "cfgSvc2=%WINDIR%\System32\config\systemprofile\AppData\Roaming\RustDesk\config"
 
-set "_arch=x86"
-if /i "%PROCESSOR_ARCHITECTURE%"=="AMD64" set "_arch=x64"
-if /i "%PROCESSOR_ARCHITEW6432%"=="AMD64" set "_arch=x64"
+rem Arquitetura do Windows: x64, arm64 ou x86
+set "_arch=%PROCESSOR_ARCHITECTURE%"
+if defined PROCESSOR_ARCHITEW6432 set "_arch=%PROCESSOR_ARCHITEW6432%"
+if /i "%_arch%"=="AMD64" (set "_arch=x64") else if /i "%_arch%"=="ARM64" (set "_arch=arm64") else set "_arch=x86"
 
-rem Windows 7 / Server 2008 R2 = versao 6.1: ajustes de TLS, pre-requisitos e build do RustDesk
+rem Versao do Windows como maior*100+menor: 601 = 7/2008 R2, 602 = 8/2012, 603 = 8.1/2012 R2,
+rem 1000 = 10/11. Vem do registro, que nao muda com o idioma. Do 10 em diante o CurrentVersion
+rem fica em "6.3" por compatibilidade, por isso o CurrentMajorVersionNumber e lido antes.
+set "_ntKey=HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+set "_winVer="
+for /f "tokens=2,*" %%a in ('reg query "%_ntKey%" /v CurrentMajorVersionNumber 2^>nul') do if /i "%%a"=="REG_DWORD" set /a "_winVer=%%b * 100"
+if not defined _winVer for /f "tokens=2,*" %%a in ('reg query "%_ntKey%" /v CurrentVersion 2^>nul') do if /i "%%a"=="REG_SZ" for /f "tokens=1,2 delims=." %%c in ("%%b") do set /a "_winVer=%%c * 100 + %%d"
+rem Se nao der para ler, trata como Windows atual: nenhum ajuste de sistema antigo e aplicado
+if not defined _winVer set "_winVer=1000"
+
+if %_winVer% LSS 601 (
+    echo This script requires Windows 7 SP1 or later.
+    pause
+    exit /b 1
+)
+
+rem Windows 7 / Server 2008 R2: pre-requisitos, TLS e build do RustDesk proprios
 set "_win7="
-ver | "%sys%\find.exe" " 6.1." >nul && set "_win7=1"
+if %_winVer% EQU 601 set "_win7=1"
 
 for %%k in ("%~f0") do set "batchName=%%~nk"
 set "_elev=%TEMP%\elev_!batchName!.vbs"
@@ -53,8 +77,8 @@ rem A janela elevada fica oculta, exceto no Windows 7 com PowerShell 2: nele os
 rem pre-requisitos sao instalados nessa janela, e erros param num pause.
 set "_show=0"
 if defined _win7 (
-    powershell -NoProfile -Command "exit ([int]$PSVersionTable.PSVersion.Major)" >nul 2>&1
-    if !errorlevel! LSS 3 set "_show=1"
+    call :get_psver
+    if !_psver! LSS 3 set "_show=1"
 )
 >  "!_elev!" echo Set UAC = CreateObject^("Shell.Application"^)
 >> "!_elev!" echo args = "ELEV "
@@ -70,26 +94,8 @@ exit /B
 cd /d "%~dp0"
 if "%~1"=="ELEV" (del "!_elev!" 1>nul 2>nul & shift /1)
 
-reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings" /v SecureProtocols /t REG_DWORD /d 0x00000A80 /f >nul 2>&1
-reg add "HKLM\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" /v SystemDefaultTlsVersions /t REG_DWORD /d 1 /f >nul 2>&1
-reg add "HKLM\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" /v SchUseStrongCrypto /t REG_DWORD /d 1 /f >nul 2>&1
-reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v4.0.30319" /v SystemDefaultTlsVersions /t REG_DWORD /d 1 /f >nul 2>&1
-reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v4.0.30319" /v SchUseStrongCrypto /t REG_DWORD /d 1 /f >nul 2>&1
-reg add "HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client" /v Enabled /t REG_DWORD /d 1 /f >nul 2>&1
-reg add "HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client" /v DisabledByDefault /t REG_DWORD /d 0 /f >nul 2>&1
-
-rem Windows 7: TLS 1.2 no WinINet, usado pelo download via VBS; no WinHTTP, usado pelo certutil,
-rem com o KB3140245; e no .NET 3.5, usado pelo PowerShell 2.0, com o KB3154518.
-rem So no Windows 7: no 8.1+ esses valores limitariam o TLS 1.3.
-if defined _win7 (
-    reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v SecureProtocols /t REG_DWORD /d 0x00000A80 /f >nul 2>&1
-    reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp" /v DefaultSecureProtocols /t REG_DWORD /d 0x00000A80 /f >nul 2>&1
-    reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp" /v DefaultSecureProtocols /t REG_DWORD /d 0x00000A80 /f >nul 2>&1
-    reg add "HKLM\SOFTWARE\Microsoft\.NETFramework\v2.0.50727" /v SystemDefaultTlsVersions /t REG_DWORD /d 1 /f >nul 2>&1
-    reg add "HKLM\SOFTWARE\Microsoft\.NETFramework\v2.0.50727" /v SchUseStrongCrypto /t REG_DWORD /d 1 /f >nul 2>&1
-    reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v2.0.50727" /v SystemDefaultTlsVersions /t REG_DWORD /d 1 /f >nul 2>&1
-    reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v2.0.50727" /v SchUseStrongCrypto /t REG_DWORD /d 1 /f >nul 2>&1
-)
+call :get_psver
+call :setup_tls
 
 :run
 call :check_ps
@@ -298,12 +304,15 @@ exit /b 0
 set "_rdVer=1.4.9"
 for /f "usebackq" %%v in (`powershell -NoProfile -Command "try{[Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor 3072}catch{};try{(Invoke-RestMethod 'https://api.github.com/repos/rustdesk/rustdesk/releases/latest').tag_name}catch{'1.4.9'}" 2^>nul`) do set "_rdVer=%%v"
 if /i "!_arch!"=="x64" (
-    set "_rdUrl=https://github.com/rustdesk/rustdesk/releases/download/!_rdVer!/rustdesk-!_rdVer!-x86_64.exe"
+    set "_rdBuild=x86_64"
+) else if /i "!_arch!"=="arm64" (
+    set "_rdBuild=aarch64"
 ) else (
-    set "_rdUrl=https://github.com/rustdesk/rustdesk/releases/download/!_rdVer!/rustdesk-!_rdVer!-x86-sciter.exe"
+    set "_rdBuild=x86-sciter"
 )
 rem Windows 7: a build Flutter nao tem suporte garantido; a sciter de 32 bits roda em x86 e x64
-if defined _win7 set "_rdUrl=https://github.com/rustdesk/rustdesk/releases/download/!_rdVer!/rustdesk-!_rdVer!-x86-sciter.exe"
+if defined _win7 set "_rdBuild=x86-sciter"
+set "_rdUrl=https://github.com/rustdesk/rustdesk/releases/download/!_rdVer!/rustdesk-!_rdVer!-!_rdBuild!.exe"
 exit /b 0
 
 
@@ -389,14 +398,84 @@ echo Download error: "!_dlOut!"
 exit /b 1
 
 
+:get_psver
+rem Versao principal do PowerShell, ou 0 se ele nao existir
+set "_psver=0"
+if not exist "%sys%\WindowsPowerShell\v1.0\powershell.exe" exit /b 0
+powershell -NoProfile -Command "exit ([int]$PSVersionTable.PSVersion.Major)" >nul 2>&1
+set "_psver=%errorlevel%"
+exit /b 0
+
+
+:setup_tls
+rem Liga o TLS 1.2 so onde o Windows nao o liga sozinho, e so o bit que falta: os outros protocolos
+rem ficam como estao. Do Windows 8.1 em diante o TLS 1.2 ja vem ligado em tudo, e no 11 um valor
+rem fixo ainda desligaria o TLS 1.3, entao nada e alterado. O PowerShell nao depende destes
+rem valores: cada download pede o TLS 1.2 (3072) no proprio codigo.
+if %_winVer% GTR 602 exit /b 0
+
+rem No Windows 64 bits o registro tem duas visoes, a nativa e a dos programas 32 bits; no 32 bits, uma
+set _views=""
+if /i "%_arch%"=="x64" set _views="/reg:64" "/reg:32"
+
+rem WinINet, usado pelo download via VBS: o IE 11 ja liga o TLS 1.2; o IE 8, 9 e 10 nao
+set "_ieDef=0xA0"
+for /f "tokens=2,*" %%a in ('reg query "HKLM\SOFTWARE\Microsoft\Internet Explorer" /v svcVersion 2^>nul') do if /i "%%a"=="REG_SZ" for /f "delims=." %%c in ("%%b") do if "%%c"=="11" set "_ieDef=0xA80"
+call :reg_bits "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" SecureProtocols 0x800 %_ieDef%
+
+rem WinHTTP, usado pelo certutil: so vale com a atualizacao KB3140245, sem ela o valor e ignorado.
+rem Sem o valor, o padrao do Windows 7 e do 8 e SSL 3.0 + TLS 1.0 (0xA0).
+for %%v in (%_views%) do call :reg_bits "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp" DefaultSecureProtocols 0x800 0xA0 %%~v
+
+if %_winVer% NEQ 601 exit /b 0
+
+rem SChannel: no Windows 7 o TLS 1.2 de cliente existe, mas fica fora do padrao do sistema
+set "_tls12=HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client"
+call :reg_dword "%_tls12%" Enabled 1 1
+call :reg_dword "%_tls12%" DisabledByDefault 0 1
+
+rem .NET 3.5, usado pelo PowerShell 2.0: so vale com a atualizacao KB3154518. Depois do WMF 5.0 o
+rem PowerShell usa o .NET 4, e estes valores deixam de ser necessarios.
+if %_psver% GEQ 3 exit /b 0
+for %%v in (%_views%) do (
+    call :reg_dword "HKLM\SOFTWARE\Microsoft\.NETFramework\v2.0.50727" SystemDefaultTlsVersions 1 0 %%~v
+    call :reg_dword "HKLM\SOFTWARE\Microsoft\.NETFramework\v2.0.50727" SchUseStrongCrypto 1 0 %%~v
+)
+exit /b 0
+
+
+rem :reg_dword chave valor desejado padrao [/reg:64 ou /reg:32]
+rem Grava o DWORD so se o valor atual for outro. Valor ausente conta como o padrao do Windows.
+:reg_dword
+call :reg_read "%~1" "%~2" "%~4" "%~5"
+set /a "_rNew=%~3"
+goto _reg_write
+
+rem :reg_bits chave valor bits padrao [/reg:64 ou /reg:32]
+rem Liga os bits no DWORD sem mexer nos outros. Valor ausente conta como o padrao do Windows.
+:reg_bits
+call :reg_read "%~1" "%~2" "%~4" "%~5"
+set /a "_rNew=_rCur | %~3"
+
+:_reg_write
+if %_rNew% EQU %_rCur% exit /b 0
+reg add "%~1" /v "%~2" /t REG_DWORD /d %_rNew% /f %~5 >nul 2>&1
+exit /b 0
+
+:reg_read
+set "_rCur="
+for /f "tokens=2,*" %%a in ('reg query "%~1" /v "%~2" %~4 2^>nul') do if /i "%%a"=="REG_DWORD" set "_rCur=%%b"
+if not defined _rCur set "_rCur=%~3"
+set /a "_rCur=%_rCur%"
+exit /b 0
+
+
 :check_ps
 if not exist "%sys%\WindowsPowerShell\v1.0\powershell.exe" (
     echo PowerShell not found. Cannot continue.
     pause
     exit /b 1
 )
-powershell -NoProfile -Command "exit ([int]$PSVersionTable.PSVersion.Major)" 2>nul
-set "_psver=%errorlevel%"
 if %_psver% GEQ 3 exit /b 0
 
 echo PowerShell %_psver%.x found. Version 3+ required.
@@ -444,9 +523,6 @@ exit /b 1
 
 
 :install_wmf50
-set "_arch=x86"
-if /i "%PROCESSOR_ARCHITECTURE%"=="AMD64" set "_arch=x64"
-if /i "%PROCESSOR_ARCHITEW6432%"=="AMD64" set "_arch=x64"
 set "_wmfFile=%TEMP%\wmf50_!_arch!.msu"
 if /i "!_arch!"=="x64" (
     set "_wmfUrl=https://download.microsoft.com/download/2/C/6/2C6E1B4A-EBE5-48A6-B225-2D2058A9CEFB/Win7AndW2K8R2-KB3134760-x64.msu"
