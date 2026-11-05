@@ -476,7 +476,9 @@ exit /b 1
 if not exist "%selfPath%" copy /y "!batchPath!" "%selfPath%" >nul 2>&1
 reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "RustDeskSetup" /t REG_SZ /d "cmd /c \"%selfPath%\"" /f >nul 2>&1
 
-mshta "vbscript:CreateObject(""WScript.Shell"").Popup(""Dependencia instalada com sucesso."" & Chr(13) & Chr(10) & Chr(13) & Chr(10) & ""O sistema sera reiniciado em 30 segundos."" & Chr(13) & Chr(10) & Chr(13) & Chr(10) & ""Clique em OK para reiniciar agora."",30,""Reinicializacao Necessaria"",48)(window.close)"
+rem O codigo vai dentro de Execute("..."): so dentro de uma string VBScript o "" vira aspas.
+rem Na forma "vbscript:CreateObject(""..."")" o mshta repassa o "" literal e o script quebra.
+mshta vbscript:Execute("CreateObject(""WScript.Shell"").Popup ""Dependencia instalada com sucesso."" & vbCrLf & vbCrLf & ""O sistema sera reiniciado em 30 segundos."" & vbCrLf & vbCrLf & ""Clique em OK para reiniciar agora."",30,""Reinicializacao Necessaria"",48:close")
 
 shutdown /r /t 0
 exit /B
