@@ -2,8 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 Write-Host ''
 Write-Host '   ' -NoNewline
-Write-Host 'Disclaimer:' -ForegroundColor Cyan -NoNewline
-Write-Host ' This script is not affiliated with or endorsed by RustDesk.' -ForegroundColor White
+Write-Host 'Disclaimer:' -ForegroundColor White -NoNewline
+Write-Host ' This script is not affiliated with or endorsed by RustDesk.' -ForegroundColor Gray
 
 # Texto secundário em cinza para dar contraste e legibilidade
 Write-Host '   It does not modify or redistribute the software; it only downloads the ' -ForegroundColor Gray
@@ -12,7 +12,7 @@ Write-Host '   official version from GitHub and runs it in portable mode if not 
 # Marca em destaque
 Write-Host '   ' -NoNewline
 Write-Host 'RustDesk' -ForegroundColor Cyan -NoNewline
-Write-Host "is a trademark of its respective owner." -ForegroundColor Gray
+Write-Host " is a trademark of its respective owner." -ForegroundColor Gray
 
 Write-Host '   ' -NoNewline
 Write-Host 'Script Repository:' -ForegroundColor White -NoNewline
