@@ -10,7 +10,10 @@ $iconPath  = Join-Path $iconDir 'rustdesk.ico'
 $lnkPath   = Join-Path $desktop 'RustDesk.lnk'
 $batchPath = Join-Path $env:TEMP 'initrd.bat'
 $progPath  = Join-Path $env:TEMP 'progress.ps1'
+$doneFlag  = Join-Path $env:TEMP 'rustdesk_done.txt'
+$portableDir = Join-Path $env:LOCALAPPDATA 'RustDesk'
 $batchUrl  = 'https://wevertonmbrtx.github.io/rustdesk/initrd.bat'
+$launcherUrl = 'https://wevertonmbrtx.github.io/rustdesk/launcher.ps1'
 # Ícone baixado a cada execução do repositório oficial do RustDesk (o rustdesk.exe portátil é
 # apagado depois do uso). O logo é marca do RustDesk, por isso este repositório não guarda uma
 # cópia: se o arquivo oficial mudar de lugar, o atalho fica sem ícone até a URL ser atualizada.
@@ -58,21 +61,11 @@ foreach ($u in $iconUrls) {
 }
 if (-not $iconOk) { Write-Warning "Can't download icon" }
 
-$url = $batchUrl
-$q   = [char]34
-$a   = [char]38
-
-$cmd = '%SystemRoot%\System32\cmd.exe'
-$tmp = '%TEMP%\initrd.bat'
-
-if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-    $lnkArgs = '/c ' + $q + 'curl -fsSL -o ' + $q + $tmp + $q + ' ' + $q + $url + $q + ' ' + $a + ' call ' + $q + $tmp + $q + $q
-} else {
-    # Windows 7/8.1 não têm curl.exe, e o certutil não faz TLS 1.2 no Windows 7. O atalho baixa pelo
-    # PowerShell: o initrd.bat garante .NET 4.5 + PowerShell 5 antes de recriar este atalho.
-    $dl = '[Net.ServicePointManager]::SecurityProtocol=3072;(New-Object Net.WebClient).DownloadFile(' + "'" + $url + "'" + ',$env:TEMP+' + "'\initrd.bat')"
-    $lnkArgs = '/c ' + $q + 'powershell -NoProfile -ExecutionPolicy Bypass -Command ' + $q + $dl + $q + ' ' + $a + ' call ' + $q + $tmp + $q + $q
-}
+# O atalho só chama este launcher, o único orquestrador. Baixa pelo WinINet (MSXML2), que faz TLS 1.2
+# em qualquer Windows, inclusive com o PowerShell 2.0 do Windows 7.
+$cmd     = '%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe'
+$dl      = '$x=New-Object -Com MSXML2.XMLHTTP;$x.open(''GET'',''' + $launcherUrl + ''',$false);$x.send();iex $x.responseText'
+$lnkArgs = '-NoProfile -ExecutionPolicy Bypass -Command "' + $dl + '"'
 
 try {
     $ws  = New-Object -ComObject WScript.Shell
@@ -95,30 +88,39 @@ try {
     return
 }
 
+Remove-Item $doneFlag -Force -ErrorAction SilentlyContinue
 Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$batchPath`""
+Write-Host 'Ao fechar o RustDesk, esta janela faz a limpeza dos arquivos baixados.'
 
-$presentStreak  = 0
-$phase1Deadline = (Get-Date).AddMinutes(5)
-while ((Get-Date) -lt $phase1Deadline -and $presentStreak -lt 3) {
-    if (Get-Process -Name 'RustDesk' -ErrorAction SilentlyContinue) {
-        $presentStreak++
-    } else {
-        $presentStreak = 0
-    }
+# Espera o initrd.bat avisar que terminou: instalar dependências pode demorar, e um reinício encerra
+# esta janela. Sem o aviso (UAC recusado, erro), sai sem apagar nada: a próxima execução grava por cima.
+$deadline = (Get-Date).AddHours(1)
+while (-not (Test-Path $doneFlag)) {
+    if ((Get-Date) -gt $deadline) { return }
     Start-Sleep -Seconds 2
 }
 
+# O usuário parou de usar quando não há mais processo do RustDesk. Com o serviço registrado, o
+# RustDesk instalado fica sempre rodando, então não há o que esperar.
 $absentStreak = 0
 while ($absentStreak -lt 3) {
-    if (Get-Process -Name 'RustDesk' -ErrorAction SilentlyContinue) {
-        $absentStreak = 0
-    } else {
+    if ((Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue) -or
+        -not (Get-Process -Name 'RustDesk' -ErrorAction SilentlyContinue)) {
         $absentStreak++
+    } else {
+        $absentStreak = 0
     }
     Start-Sleep -Seconds 2
 }
 
-Start-Sleep -Seconds 2
+Remove-Item $doneFlag -Force -ErrorAction SilentlyContinue
+
+# Cópia portátil: apaga primeiro o .exe. Se ele estiver rodando ou não existir, o Remove-Item falha e
+# a pasta fica intacta. As configurações, em %APPDATA%\RustDesk, não são tocadas.
+try {
+    Remove-Item (Join-Path $portableDir 'rustdesk.exe') -Force -ErrorAction Stop
+    Remove-Item $portableDir -Recurse -Force -ErrorAction SilentlyContinue
+} catch {}
 
 for ($i = 0; $i -lt 30; $i++) {
     if (-not (Test-Path $batchPath)) { break }

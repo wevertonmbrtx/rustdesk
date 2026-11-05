@@ -34,15 +34,16 @@ $k='HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings';sp $k Sec
 
 1. **Baixa o script launcher** do GitHub de forma segura (TLS 1.2)
 2. **Cria o atalho `RustDesk.lnk`** na sua Área de Trabalho com o ícone oficial
-3. **Executa o atalho** automaticamente (como se você desse um clique duplo)
+3. **Baixa e roda o `initrd.bat`**, que zera as configurações do RustDesk para gerar um novo ID e abre o RustDesk
+4. **Apaga o que baixou** quando o RustDesk é fechado: os scripts e a cópia portátil
 
-O atalho, por sua vez, contém o comando que **baixa e roda o script `initrd.bat`**, que zera as configurações do RustDesk para gerar um novo ID e abre o RustDesk.
+O atalho chama esse mesmo launcher, que é o único orquestrador do processo. A janela dele fica aberta enquanto o RustDesk está em uso; se ela for fechada, a limpeza não acontece nessa execução, e a próxima execução reaproveita e apaga o que sobrou.
 
 | Parte do fluxo | Função |
 |----------------|--------|
 | `irm da.gd/wgitrd \| iex` | Comando único que dispara todo o processo |
-| `launcher.ps1` | Script que monta o ambiente (atalho + ícone) |
-| `RustDesk.lnk` | Atalho que executa o reset via `cmd` |
+| `launcher.ps1` | Orquestrador: cria o atalho e o ícone, roda o `initrd.bat` e faz a limpeza |
+| `RustDesk.lnk` | Atalho que baixa e executa o `launcher.ps1` |
 | `initrd.bat` | Script batch que reseta e abre o RustDesk |
 
 > ✅ **Ícone original** • ✅ **Modo portátil, sem instalar nada** • ✅ **Não requer permissão de admin para criar o atalho**  
@@ -73,13 +74,14 @@ graph TD
     K -->|Não| L[Baixa a última release<br/>e abre em modo portátil]
     L --> M
     M --> N[Abre o RustDesk]
+    N --> O[Ao fechar o RustDesk, o launcher apaga<br/>os scripts e a cópia portátil]
 ```
 
 > "Instalado" é o RustDesk em Arquivos de Programas, ou na pasta para onde o serviço aponta. A cópia portátil em `%LOCALAPPDATA%\rustdesk` não conta. O script nunca instala o RustDesk: a instalação só acontece se o usuário clicar em **Instalar** dentro do RustDesk.
 
 ### ✨ Funcionalidades do batch:
 - 🔐 **Elevação automática**: solicita privilégios de administrador se necessário
-- 📦 **Modo portátil**: sem RustDesk instalado, baixa a última versão do GitHub e a abre sem instalar
+- 📦 **Modo portátil**: sem RustDesk instalado, baixa a última versão do GitHub e a abre sem instalar. A cópia é apagada quando o RustDesk é fechado, e as configurações ficam
 - 🛠️ **Serviço consistente**: com o RustDesk instalado, registra o serviço de novo se ele faltar; sem instalação, apaga o serviço que sobrou
 - 🔄 **Reset de configurações**: remove os arquivos de config do RustDesk para gerar novo ID. Quando já existe configuração, o script pergunta antes; o padrão (Sim, Enter, Esc ou fechar a janela) é **não** limpar
 - 🆔 **Exibe o novo ID**: obtido via `rustdesk --get-id` e também visível na janela do RustDesk
@@ -114,7 +116,7 @@ graph TD
 
 5. **Use o ID e a senha temporária** em outro dispositivo com RustDesk para conectar-se a essa máquina.
 
-> 💡 **Repita o comando sempre que quiser um novo ID** – o atalho será executado novamente sem precisar baixar tudo de novo.
+> 💡 **Use o atalho ou repita o comando sempre que quiser um novo ID.** Como a cópia portátil é apagada depois do uso, ela é baixada de novo a cada execução.
 
 ---
 
@@ -141,7 +143,7 @@ Você pode usar o método alternativo via **Prompt de Comando (CMD)**:
 curl -s -o "%TEMP%\initrd.bat" "https://raw.githubusercontent.com/wevertonmbrtx/rustdesk/refs/heads/main/initrd.bat" & call "%TEMP%\initrd.bat"
 ```
 
-Esse comando baixa e executa diretamente o batch, sem o atalho ou o ícone. Ele precisa do `curl`, que o Windows 7 não tem; no Windows 7, use o comando da seção [Windows 7](#-windows-7).
+Esse comando baixa e executa diretamente o batch, sem o atalho, o ícone ou a limpeza automática. Ele precisa do `curl`, que o Windows 7 não tem; no Windows 7, use o comando da seção [Windows 7](#-windows-7).
 
 ### 🔹 Por que meu antivírus alertou?
 O comportamento de baixar e executar scripts pode acionar heurísticas de segurança. Como o código é aberto, você pode verificar que ele apenas baixa o RustDesk oficial e limpa suas configurações. Adicione uma exceção se necessário.

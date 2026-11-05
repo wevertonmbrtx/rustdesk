@@ -27,6 +27,8 @@ set "porPath0=%TEMP%\rustdesk.exe"
 set "selfPath=%TEMP%\initrd.bat"
 set "progPath=%TEMP%\progress.ps1"
 set "statPath=%TEMP%\rustdesk_progress.txt"
+rem Aviso para o launcher.ps1 de que este script terminou e ja pode ser apagado
+set "doneFlag=%TEMP%\rustdesk_done.txt"
 set /a _pb=0
 set /a _os=0
 set "_rdId="
@@ -105,7 +107,6 @@ if errorlevel 1 goto :eof
 call :detect_install
 call :ask_cleanup
 
-call :create_lnk
 call :start_progress
 set /a _os=5
 
@@ -128,12 +129,14 @@ if errorlevel 1 goto :fail
 
 echo Finished.
 timeout /t 1 >nul
+> "%doneFlag%" echo done
 goto :eof
 
 :fail
 echo RustDesk can not be opened.
 call :stage 0 0 "RustDesk can not be opened." fail
 timeout /t 1 >nul
+> "%doneFlag%" echo done
 goto :eof
 
 
@@ -373,52 +376,6 @@ set "_rdUrl=https://github.com/rustdesk/rustdesk/releases/download/!_rdVer!/rust
 exit /b 0
 
 
-:create_lnk
-del /f /q "%USERPROFILE%\Desktop\RustDesk*.lnk" 2>nul
-del /f /q "%PUBLIC%\Desktop\RustDesk*.lnk"      2>nul
-set "_lnk=%TEMP%\_lnk.ps1"
->  "%_lnk%" echo $url = 'https://wevertonmbrtx.github.io/rustdesk/initrd.bat'
->> "%_lnk%" echo $q   = [char]34
->> "%_lnk%" echo $a   = [char]38
->> "%_lnk%" echo $cmd = '%SystemRoot%\System32\cmd.exe'
->> "%_lnk%" echo $tmp = '%%TEMP%%\initrd.bat'
->> "%_lnk%" echo if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
->> "%_lnk%" echo     $lnkArgs = '/c ' + $q + 'curl -fsSL -o ' + $q + $tmp + $q + ' ' + $q + $url + $q + ' ' + $a + ' call ' + $q + $tmp + $q + $q
->> "%_lnk%" echo } else {
->> "%_lnk%" echo     $dl = '[Net.ServicePointManager]::SecurityProtocol=3072;(New-Object Net.WebClient).DownloadFile(' + "'" + $url + "'" + ',$env:TEMP+' + "'\initrd.bat')"
->> "%_lnk%" echo     $lnkArgs = '/c ' + $q + 'powershell -NoProfile -ExecutionPolicy Bypass -Command ' + $q + $dl + $q + ' ' + $a + ' call ' + $q + $tmp + $q + $q
->> "%_lnk%" echo }
->> "%_lnk%" echo $icDir   = Join-Path $env:LOCALAPPDATA 'RustDeskLauncher'
->> "%_lnk%" echo $lnkIcon = Join-Path $icDir 'rustdesk.ico'
->> "%_lnk%" echo try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072 } catch {}
->> "%_lnk%" echo foreach ($u in @('https://raw.githubusercontent.com/rustdesk/rustdesk/master/res/icon.ico')) {
->> "%_lnk%" echo     try {
->> "%_lnk%" echo         $b = (New-Object Net.WebClient).DownloadData($u)
->> "%_lnk%" echo         if ($b.Length -gt 6 -and $b[0] -eq 0 -and $b[1] -eq 0 -and $b[2] -eq 1 -and $b[3] -eq 0) {
->> "%_lnk%" echo             $null = [IO.Directory]::CreateDirectory($icDir)
->> "%_lnk%" echo             [IO.File]::WriteAllBytes($lnkIcon, $b)
->> "%_lnk%" echo             break
->> "%_lnk%" echo         }
->> "%_lnk%" echo     } catch {}
->> "%_lnk%" echo }
->> "%_lnk%" echo try {
->> "%_lnk%" echo     $ws  = New-Object -ComObject WScript.Shell
->> "%_lnk%" echo     $lp  = $ws.SpecialFolders.Item('Desktop') + '\RustDesk.lnk'
->> "%_lnk%" echo     $lnk = $ws.CreateShortcut($lp)
->> "%_lnk%" echo     $lnk.TargetPath  = $cmd
->> "%_lnk%" echo     $lnk.Arguments   = $lnkArgs
->> "%_lnk%" echo     $lnk.WindowStyle = 1
->> "%_lnk%" echo     $lnk.Description = 'RustDesk Reset'
->> "%_lnk%" echo     if (Test-Path -LiteralPath $lnkIcon) { $lnk.IconLocation = $lnkIcon + ',0' }
->> "%_lnk%" echo     $lnk.Save()
->> "%_lnk%" echo } catch {
->> "%_lnk%" echo     Write-Warning "Can't create shortcut: $_"
->> "%_lnk%" echo }
-powershell -NoProfile -ExecutionPolicy Bypass -File "%_lnk%"
-del /f /q "%_lnk%" >nul 2>&1
-exit /b 0
-
-
 :start_progress
 call :stage 0 5 "Initializing..."
 del /f /q "%progPath%" >nul 2>&1
@@ -619,14 +576,19 @@ exit /b 1
 
 :_setup_reboot
 if not exist "%selfPath%" copy /y "!batchPath!" "%selfPath%" >nul 2>&1
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "RustDeskSetup" /t REG_SZ /d "cmd /c \"%selfPath%\"" /f >nul 2>&1
+rem Depois do reinicio quem continua e o atalho, para o launcher seguir no comando.
+rem Sem o atalho (script rodado direto), continua pelo proprio script.
+set "_resume=cmd /c \"%selfPath%\""
+if exist "%USERPROFILE%\Desktop\RustDesk.lnk" set "_resume=cmd /c start \"\" \"%USERPROFILE%\Desktop\RustDesk.lnk\""
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce" /v "RustDeskSetup" /t REG_SZ /d "!_resume!" /f >nul 2>&1
 
 rem O codigo vai dentro de Execute("..."): so dentro de uma string VBScript o "" vira aspas.
 rem Na forma "vbscript:CreateObject(""..."")" o mshta repassa o "" literal e o script quebra.
 mshta vbscript:Execute("CreateObject(""WScript.Shell"").Popup ""Dependencia instalada com sucesso."" & vbCrLf & vbCrLf & ""O sistema sera reiniciado em 30 segundos."" & vbCrLf & vbCrLf & ""Clique em OK para reiniciar agora."",30,""Reinicializacao Necessaria"",48:close")
 
 shutdown /r /t 0
-exit /B
+rem Codigo 1: o script para aqui e nao avisa o launcher, que nao pode apagar nada neste caso
+exit /b 1
 
 
 :vbs_download
