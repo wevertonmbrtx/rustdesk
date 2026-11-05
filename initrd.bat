@@ -27,9 +27,8 @@ set "porPath0=%TEMP%\rustdesk.exe"
 set "selfPath=%TEMP%\initrd.bat"
 set "progPath=%TEMP%\progress.ps1"
 set "statPath=%TEMP%\rustdesk_progress.txt"
-rem Aviso para o launcher.ps1 de que este script terminou. So existe no modo portatil.
-set "doneFlag=%TEMP%\rustdesk_done.txt"
-set "_inst="
+rem Existe enquanto o launcher.ps1 espera este script: apagar o arquivo avisa que ele terminou
+set "runFlag=%TEMP%\rustdesk_running.txt"
 set /a _pb=0
 set /a _os=0
 set "_rdId="
@@ -117,7 +116,6 @@ rem Com o RustDesk instalado: registra o servico de novo se ele faltar e inicia.
 rem Sem instalacao: apaga o servico que sobrou, que nao tem o que rodar, e abre o RustDesk em modo
 rem portatil. O script nunca instala o RustDesk: isso so acontece se o usuario clicar em Instalar nele.
 if defined _exe (
-    set "_inst=1"
     call :ensure_service
 ) else (
     call :remove_service
@@ -139,10 +137,10 @@ call :stage 0 0 "RustDesk can not be opened." fail
 timeout /t 1 >nul
 
 :finish
-rem No modo portatil, avisa o launcher, que espera o RustDesk fechar para apagar a copia portatil.
-rem Depois apaga o progress.ps1 e este script, so se ele estiver na pasta temporaria.
-rem O (goto) encerra o script antes do del: assim o cmd nao procura a proxima linha no arquivo apagado.
-if not defined _inst > "%doneFlag%" echo done
+rem Libera o launcher, se ele estiver esperando. Depois apaga o progress.ps1 e este script, so se ele
+rem estiver na pasta temporaria. O (goto) encerra o script antes do del: assim o cmd nao procura a
+rem proxima linha no arquivo apagado.
+del /f /q "%runFlag%" >nul 2>&1
 if /i not "%~f0"=="%selfPath%" goto :eof
 del /f /q "%progPath%" >nul 2>&1
 (goto) 2>nul & del /f /q "%~f0"

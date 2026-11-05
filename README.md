@@ -35,9 +35,9 @@ $k='HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings';sp $k Sec
 1. **Baixa o script launcher** do GitHub de forma segura (TLS 1.2)
 2. **Cria o atalho `RustDesk.lnk`** na sua Área de Trabalho com o ícone oficial
 3. **Baixa e roda o `initrd.bat`**, que zera as configurações do RustDesk para gerar um novo ID e abre o RustDesk
-4. **Apaga o que baixou** quando o RustDesk é fechado: os scripts e a cópia portátil
+4. **Apaga o que baixou**: os scripts ao terminar, e a cópia portátil quando o RustDesk é fechado
 
-O atalho chama esse mesmo launcher, que é o único orquestrador do processo. Com o RustDesk instalado, a janela do atalho fecha logo depois de iniciar o script. No modo portátil, uma janela pequena fica aberta enquanto o RustDesk está em uso, porque é ela que apaga a cópia portátil; se ela for fechada, a próxima execução reaproveita e apaga o que sobrou.
+O atalho chama esse mesmo launcher, que é o único orquestrador do processo. A janela do atalho fecha logo depois de iniciar o script, então nada fica esperando o RustDesk fechar: pelo atalho, a cópia portátil continua no computador e é apagada no próximo uso. Se a janela do PowerShell do comando digitado for fechada antes da limpeza, o mesmo acontece.
 
 | Parte do fluxo | Função |
 |----------------|--------|
@@ -74,14 +74,14 @@ graph TD
     K -->|Não| L[Baixa a última release<br/>e abre em modo portátil]
     L --> M
     M --> N[Abre o RustDesk]
-    N --> O[Ao fechar o RustDesk, o launcher apaga<br/>os scripts e a cópia portátil]
+    N --> O[Apaga os scripts. A cópia portátil é apagada<br/>ao fechar o RustDesk ou, pelo atalho, no próximo uso]
 ```
 
 > "Instalado" é o RustDesk em Arquivos de Programas, ou na pasta para onde o serviço aponta. A cópia portátil em `%LOCALAPPDATA%\rustdesk` não conta. O script nunca instala o RustDesk: a instalação só acontece se o usuário clicar em **Instalar** dentro do RustDesk.
 
 ### ✨ Funcionalidades do batch:
 - 🔐 **Elevação automática**: solicita privilégios de administrador se necessário
-- 📦 **Modo portátil**: sem RustDesk instalado, baixa a última versão do GitHub e a abre sem instalar. A cópia é apagada quando o RustDesk é fechado, e as configurações ficam
+- 📦 **Modo portátil**: sem RustDesk instalado, baixa a última versão do GitHub e a abre sem instalar. A cópia é apagada ao fechar o RustDesk ou, pelo atalho, no próximo uso, e as configurações ficam
 - 🛠️ **Serviço consistente**: com o RustDesk instalado, registra o serviço de novo se ele faltar; sem instalação, apaga o serviço que sobrou
 - 🔄 **Reset de configurações**: remove os arquivos de config do RustDesk para gerar novo ID. Quando já existe configuração, o script pergunta antes; o padrão (Sim, Enter, Esc ou fechar a janela) é **não** limpar
 - 🆔 **Exibe o novo ID**: obtido via `rustdesk --get-id` e também visível na janela do RustDesk

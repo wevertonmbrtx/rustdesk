@@ -39,7 +39,7 @@ $iconDir   = Join-Path $env:LOCALAPPDATA 'RustDeskLauncher'
 $iconPath  = Join-Path $iconDir 'rustdesk.ico'
 $lnkPath   = Join-Path $desktop 'RustDesk.lnk'
 $batchPath = Join-Path $env:TEMP 'initrd.bat'
-$doneFlag  = Join-Path $env:TEMP 'rustdesk_done.txt'
+$runFlag   = Join-Path $env:TEMP 'rustdesk_running.txt'
 $portableDir = Join-Path $env:LOCALAPPDATA 'RustDesk'
 $installedExes = @("$env:ProgramFiles\RustDesk\rustdesk.exe", "${env:ProgramFiles(x86)}\RustDesk\rustdesk.exe")
 $batchUrl  = 'https://wevertonmbrtx.github.io/rustdesk/initrd.bat'
@@ -118,27 +118,30 @@ try {
     return
 }
 
-Remove-Item $doneFlag -Force -ErrorAction SilentlyContinue
-Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$batchPath`""
-
-# RustDesk instalado: não há cópia portátil para apagar, e o initrd.bat apaga a si mesmo ao terminar.
-if ((Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue) -or (Test-Path $installedExes[0]) -or (Test-Path $installedExes[1])) { return }
-
-# Modo portátil: esta janela fica visível porque é ela que apaga a cópia quando o RustDesk fechar.
-# No atalho ela fica pequena e diz o que está fazendo; no comando digitado, a janela é a do próprio usuário.
-if ($rdShortcut) {
+# Apaga primeiro o .exe: se ele estiver rodando ou não existir, o Remove-Item falha e a pasta fica
+# intacta. As configurações, em %APPDATA%\RustDesk, não são tocadas.
+function Remove-Portable {
     try {
-        $sz = New-Object System.Management.Automation.Host.Size(62, 2)
-        $host.UI.RawUI.WindowSize = $sz
-        $host.UI.RawUI.BufferSize = $sz
+        Remove-Item (Join-Path $portableDir 'rustdesk.exe') -Force -ErrorAction Stop
+        Remove-Item $portableDir -Recurse -Force -ErrorAction SilentlyContinue
     } catch {}
-    Write-Host 'Feche o RustDesk quando terminar. Esta janela fecha sozinha.'
 }
 
-# Espera o initrd.bat avisar que terminou: instalar dependências pode demorar, e um reinício encerra
-# esta janela. Sem o aviso (UAC recusado, erro), sai sem apagar nada: a próxima execução grava por cima.
+# Pelo atalho, nada fica esperando o RustDesk fechar: a cópia do uso anterior é apagada aqui
+Remove-Portable
+
+# Só o comando digitado espera, porque a janela já é a do próprio usuário. Pelo atalho ou com o
+# RustDesk instalado, o launcher termina aqui, e o initrd.bat apaga a si mesmo ao terminar.
+$installed = (Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue) -or (Test-Path $installedExes[0]) -or (Test-Path $installedExes[1])
+$wait = (-not $rdShortcut) -and (-not $installed)
+if ($wait) { Set-Content -LiteralPath $runFlag -Value 'running' }
+Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$batchPath`""
+if (-not $wait) { return }
+
+# O initrd.bat apaga este aviso ao terminar. Instalar dependências pode demorar, e um reinício encerra
+# esta janela. Sem resposta (UAC recusado, erro), sai sem apagar nada.
 $deadline = (Get-Date).AddHours(1)
-while (-not (Test-Path $doneFlag)) {
+while (Test-Path $runFlag) {
     if ((Get-Date) -gt $deadline) { return }
     Start-Sleep -Seconds 2
 }
@@ -156,14 +159,7 @@ while ($absentStreak -lt 3) {
     Start-Sleep -Seconds 2
 }
 
-Remove-Item $doneFlag -Force -ErrorAction SilentlyContinue
-
-# Cópia portátil: apaga primeiro o .exe. Se ele estiver rodando ou não existir, o Remove-Item falha e
-# a pasta fica intacta. As configurações, em %APPDATA%\RustDesk, não são tocadas.
-try {
-    Remove-Item (Join-Path $portableDir 'rustdesk.exe') -Force -ErrorAction Stop
-    Remove-Item $portableDir -Recurse -Force -ErrorAction SilentlyContinue
-} catch {}
+Remove-Portable
 
 if (-not (Test-Path $lnkPath)) {
     Write-Warning "Can't find $lnkPath"
