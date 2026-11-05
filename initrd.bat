@@ -155,9 +155,10 @@ exit /b 0
 
 :ask_cleanup
 rem O padrao e nao limpar: Sim, Enter, Esc, o X e qualquer falha da janela mantem as configuracoes.
-rem Sem configuracao nenhuma nao ha o que limpar, e a pergunta nem aparece.
-set "_skipClean=1"
+rem Sem configuracao nenhuma nao ha o que perder: a pergunta nem aparece e o novo ID e gravado.
+set "_skipClean="
 if not exist "%cfgUser%" if not exist "%cfgSvc1%" if not exist "%cfgSvc2%" exit /b 0
+set "_skipClean=1"
 set "_ask=%TEMP%\_rd_ask.ps1"
 set "_ico=%LOCALAPPDATA%\RustDeskLauncher\rustdesk.ico"
 >  "%_ask%" echo Add-Type -AssemblyName System.Windows.Forms
@@ -272,6 +273,15 @@ call :stage 10 20 "Clearing configuration..."
 rd /s /q "%cfgUser%" 2>nul
 rd /s /q "%cfgSvc1%" 2>nul
 rd /s /q "%cfgSvc2%" 2>nul
+
+rem Sem config, o RustDesk tira o ID do MAC, e ele volta sempre igual: grava um ID sorteado, na mesma
+rem faixa que o RustDesk usa. Ele aceita o id sem enc_id e criptografa ao salvar. So a pasta do usuario
+rem e a do servico: o RustDesk troca o caminho systemprofile (cfgSvc2) pelo LocalService (cfgSvc1).
+set /a "_newId=1000000000 + (!RANDOM! * 32768 + !RANDOM!) %% 1000000000"
+for %%d in ("%cfgUser%" "%cfgSvc1%") do (
+    md "%%~d" 2>nul
+    > "%%~d\RustDesk.toml" echo id = '!_newId!'
+)
 
 cls
 echo Initializing RustDesk...

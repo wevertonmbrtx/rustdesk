@@ -34,7 +34,7 @@ $k='HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings';sp $k Sec
 
 1. **Baixa o script launcher** do GitHub de forma segura (TLS 1.2)
 2. **Cria o atalho `RustDesk.lnk`** na sua Área de Trabalho com o ícone oficial
-3. **Baixa e roda o `initrd.bat`**, que zera as configurações do RustDesk para gerar um novo ID e abre o RustDesk
+3. **Baixa e roda o `initrd.bat`**, que zera as configurações do RustDesk, grava um novo ID sorteado e abre o RustDesk
 4. **Apaga o que baixou**: os scripts ao terminar, e a cópia portátil quando o RustDesk é fechado
 
 O atalho chama esse mesmo launcher, que é o único orquestrador do processo. Pelo atalho, as janelas do PowerShell e do cmd ficam ocultas e só a barra de progresso aparece, além do pedido de permissão do Windows (UAC) e da pergunta sobre limpar as configurações, quando houver o que limpar. Nada fica esperando o RustDesk fechar: pelo atalho, a cópia portátil continua no computador e é apagada no próximo uso. Se a janela do PowerShell do comando digitado for fechada antes da limpeza, o mesmo acontece.
@@ -56,10 +56,10 @@ O atalho chama esse mesmo launcher, que é o único orquestrador do processo. Pe
 ```mermaid
 graph TD
     A[Início] --> B{Existe configuração<br/>do RustDesk?}
-    B -->|Não| E{RustDesk instalado?}
+    B -->|Não| D[Para o RustDesk, apaga as configurações<br/>e grava um novo ID sorteado]
     B -->|Sim| C{Iniciar sem limpar<br/>as configurações?}
-    C -->|Sim - padrão| E
-    C -->|Não| D[Para o RustDesk e apaga<br/>as configurações: novo ID]
+    C -->|Sim - padrão| E{RustDesk instalado?}
+    C -->|Não| D
     D --> E
     E -->|Sim| F{Serviço existe?}
     F -->|Não| G[Registra o serviço]
@@ -83,7 +83,7 @@ graph TD
 - 🔐 **Elevação automática**: solicita privilégios de administrador se necessário
 - 📦 **Modo portátil**: sem RustDesk instalado, baixa a última versão do GitHub e a abre sem instalar. A cópia é apagada ao fechar o RustDesk ou, pelo atalho, no próximo uso, e as configurações ficam
 - 🛠️ **Serviço consistente**: com o RustDesk instalado, registra o serviço de novo se ele faltar; sem instalação, apaga o serviço que sobrou
-- 🔄 **Reset de configurações**: remove os arquivos de config do RustDesk para gerar novo ID. Quando já existe configuração, o script pergunta antes; o padrão (Sim, Enter, Esc ou fechar a janela) é **não** limpar
+- 🔄 **Reset de configurações**: remove os arquivos de config do RustDesk e grava um novo ID sorteado. Quando já existe configuração, o script pergunta antes; o padrão (Sim, Enter, Esc ou fechar a janela) é **não** limpar e manter o ID atual. Para trocar o ID, responda **Não**
 - 🆔 **Exibe o novo ID**: obtido via `rustdesk --get-id` e também visível na janela do RustDesk
 - 🌐 **Download inteligente**: tenta `curl` → `PowerShell` → `certutil` → `VBScript` como fallback
 - 🪟 **Windows 7**: instala .NET 4.5.2 + WMF 5.0 quando falta o PowerShell 3+, habilita o TLS 1.2 e usa a build sciter do RustDesk
@@ -91,7 +91,7 @@ graph TD
 - 🧩 **Por arquitetura**: x64 usa a build `x86_64`, ARM64 a build `aarch64` nativa e x86 a `sciter` de 32 bits. Se for aberto por um programa 32 bits num Windows 64 bits, o script se reabre no `cmd` nativo
 - ⛔ **Windows XP e Vista** não são suportados: o script avisa e para
 
-> ℹ️ **Diferença em relação ao AnyDesk:** o RustDesk guarda o ID nos arquivos de configuração (`RustDesk.toml`). Ao limpá-los, o RustDesk gera um **novo ID** e uma **nova senha de acesso temporária** ao reiniciar.
+> ℹ️ **Por que sortear o ID:** o RustDesk guarda o ID nos arquivos de configuração (`RustDesk.toml`), mas, sem eles, calcula o ID a partir do endereço MAC, e o resultado é sempre o mesmo. Por isso só limpar não basta: o script grava um ID sorteado nesse arquivo. A **senha de acesso temporária** também é nova ao reiniciar.
 
 ---
 
