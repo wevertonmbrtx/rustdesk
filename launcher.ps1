@@ -1,13 +1,26 @@
 $ErrorActionPreference = 'Stop'
 
-# O (TM) vai por [char]: o irm pode decodificar este arquivo com outra codificação
 Write-Host ''
-Write-Host '   Disclaimer: This script is not affiliated with or endorsed by RustDesk.'
-Write-Host '   It does not modify or redistribute the software; it only downloads the official version'
-Write-Host '   from GitHub and runs it in portable mode if not installed.'
-Write-Host ('   RustDesk' + [char]0x2122 + ' is a trademark of its respective owner.')
-Write-Host '   Script Repository: https://github.com/wevertonmbrtx/rustdesk'
-Write-Host '   Report Issues: https://github.com/wevertonmbrtx/rustdesk/issues'
+Write-Host '   ' -NoNewline
+Write-Host 'Disclaimer:' -ForegroundColor Cyan -NoNewline
+Write-Host ' This script is not affiliated with or endorsed by RustDesk.' -ForegroundColor White
+
+# Texto secundário em cinza para dar contraste e legibilidade
+Write-Host '   It does not modify or redistribute the software; it only downloads the official version' -ForegroundColor Gray
+Write-Host '   from GitHub and runs it in portable mode if not installed.' -ForegroundColor Gray
+
+# Marca em destaque
+Write-Host '   ' -NoNewline
+Write-Host 'RustDesk' -ForegroundColor Cyan -NoNewline
+Write-Host "$([char]0x2122) is a trademark of its respective owner." -ForegroundColor Gray
+
+Write-Host '   ' -NoNewline
+Write-Host 'Script Repository:' -ForegroundColor White -NoNewline
+Write-Host ' https://github.com/wevertonmbrtx/rustdesk' -ForegroundColor Blue
+
+Write-Host '   ' -NoNewline
+Write-Host 'Report Issues:' -ForegroundColor White -NoNewline
+Write-Host ' https://github.com/wevertonmbrtx/rustdesk/issues' -ForegroundColor Blue
 Write-Host ''
 
 # [Net.SecurityProtocolType]::Tls12 não existe no .NET 3.5 (PowerShell 2.0 do Windows 7).
