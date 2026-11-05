@@ -399,24 +399,36 @@ exit /b 1
 
 
 :get_psver
-rem Versao principal do PowerShell, ou 0 se ele nao existir
+rem _psver: versao principal do PowerShell, ou 0 se ele nao existir.
+rem _psTls12: 1 se o PowerShell ja usa TLS 1.2 sem ajuste no codigo (o padrao inclui o 3072, ou e o
+rem padrao do sistema, 0); 0 se nao. As duas respostas voltam juntas no codigo de saida: versao*10+tls.
 set "_psver=0"
+set "_psTls12=1"
 if not exist "%sys%\WindowsPowerShell\v1.0\powershell.exe" exit /b 0
-powershell -NoProfile -Command "exit ([int]$PSVersionTable.PSVersion.Major)" >nul 2>&1
-set "_psver=%errorlevel%"
+powershell -NoProfile -Command "$p = [int][Net.ServicePointManager]::SecurityProtocol; exit ($PSVersionTable.PSVersion.Major * 10 + [int]($p -eq 0 -or ($p -band 3072) -ne 0))" >nul 2>&1
+set /a "_psver=%errorlevel% / 10, _psTls12=%errorlevel% %% 10"
 exit /b 0
 
 
 :setup_tls
-rem Liga o TLS 1.2 so onde o Windows nao o liga sozinho, e so o bit que falta: os outros protocolos
-rem ficam como estao. Do Windows 8.1 em diante o TLS 1.2 ja vem ligado em tudo, e no 11 um valor
-rem fixo ainda desligaria o TLS 1.3, entao nada e alterado. O PowerShell nao depende destes
-rem valores: cada download pede o TLS 1.2 (3072) no proprio codigo.
-if %_winVer% GTR 602 exit /b 0
+rem Liga o TLS 1.2 so onde ele falta, e so o bit que falta: os outros protocolos ficam como estao.
 
 rem No Windows 64 bits o registro tem duas visoes, a nativa e a dos programas 32 bits; no 32 bits, uma
 set _views=""
 if /i "%_arch%"=="x64" set _views="/reg:64" "/reg:32"
+
+rem .NET 4, usado pelo PowerShell 3 em diante: ate o .NET 4.6 o padrao e SSL 3.0 + TLS 1.0, e um
+rem "irm" digitado no PowerShell falha em sites que exigem TLS 1.2 (os downloads deste script pedem
+rem o TLS 1.2 no codigo e nao dependem disto). Vale para qualquer versao do Windows, por isso o teste
+rem e o proprio PowerShell (:get_psver): no Windows 10/11 atual ele ja usa TLS 1.2 e nada e gravado.
+if %_psver% GEQ 3 if %_psTls12% EQU 0 for %%v in (%_views%) do (
+    call :reg_dword "HKLM\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" SchUseStrongCrypto 1 0 %%~v
+    call :reg_dword "HKLM\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" SystemDefaultTlsVersions 1 0 %%~v
+)
+
+rem Do Windows 8.1 em diante o TLS 1.2 ja vem ligado no sistema, e no 11 um valor fixo ainda
+rem desligaria o TLS 1.3: daqui para baixo e so Windows 7 e 8.
+if %_winVer% GTR 602 exit /b 0
 
 rem WinINet, usado pelo download via VBS: o IE 11 ja liga o TLS 1.2; o IE 8, 9 e 10 nao
 set "_ieDef=0xA0"

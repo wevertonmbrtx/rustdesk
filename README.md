@@ -72,7 +72,7 @@ graph TD
 - 🆔 **Exibe o novo ID**: obtido via `rustdesk --get-id` e também visível na janela do RustDesk
 - 🌐 **Download inteligente**: tenta `curl` → `PowerShell` → `certutil` → `VBScript` como fallback
 - 🪟 **Windows 7**: instala .NET 4.5.2 + WMF 5.0 quando falta o PowerShell 3+, habilita o TLS 1.2 e usa a build sciter do RustDesk
-- 🔒 **TLS por versão**: só no Windows 7 e no 8 o script liga o TLS 1.2 no registro, e só o que falta (os outros protocolos ficam como estão). Do Windows 8.1 em diante o TLS 1.2 já vem ligado, e nada é alterado
+- 🔒 **TLS só onde falta**: no Windows 7 e no 8 o script liga o TLS 1.2 do sistema no registro, e só o que falta (os outros protocolos ficam como estão). Em qualquer versão, ele pergunta ao PowerShell se o .NET já usa TLS 1.2 e só ajusta o .NET se não usar, para o `irm` funcionar. No Windows 10/11 atual nada é alterado
 - 🧩 **Por arquitetura**: x64 usa a build `x86_64`, ARM64 a build `aarch64` nativa e x86 a `sciter` de 32 bits. Se for aberto por um programa 32 bits num Windows 64 bits, o script se reabre no `cmd` nativo
 - ⛔ **Windows XP e Vista** não são suportados: o script avisa e para
 
