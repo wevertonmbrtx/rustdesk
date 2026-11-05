@@ -1,27 +1,34 @@
 $ErrorActionPreference = 'Stop'
 
-Write-Host ''
-Write-Host '   ' -NoNewline
-Write-Host 'Disclaimer:' -ForegroundColor White -NoNewline
-Write-Host ' This script is not affiliated with or endorsed by RustDesk.' -ForegroundColor Gray
+# O aviso aparece só no comando digitado: o comando do atalho define $rdShortcut antes de rodar este script
+if (-not $rdShortcut) {
+    Write-Host ''
+    Write-Host '   ' -NoNewline
+    Write-Host 'Disclaimer:' -ForegroundColor White -NoNewline
+    Write-Host ' Unofficial script, not affiliated with or endorsed by RustDesk.' -ForegroundColor Gray
 
-# Texto secundário em cinza para dar contraste e legibilidade
-Write-Host '   It does not modify or redistribute the software; it only downloads the ' -ForegroundColor Gray
-Write-Host '   official version from GitHub and runs it in portable mode if not installed.' -ForegroundColor Gray
+    # Texto secundário em cinza para dar contraste e legibilidade
+    Write-Host '   Runs the official, unmodified RustDesk, in portable mode if not installed.' -ForegroundColor Gray
 
-# Marca em destaque
-Write-Host '   ' -NoNewline
-Write-Host 'RustDesk' -ForegroundColor Cyan -NoNewline
-Write-Host " is a trademark of its respective owner." -ForegroundColor Gray
+    # Marca em destaque
+    Write-Host '   ' -NoNewline
+    Write-Host 'RustDesk' -ForegroundColor Cyan -NoNewline
+    Write-Host " is a trademark of its respective owner." -ForegroundColor Gray
 
-Write-Host '   ' -NoNewline
-Write-Host 'Script Repository:' -ForegroundColor White -NoNewline
-Write-Host ' https://github.com/wevertonmbrtx/rustdesk' -ForegroundColor Green
+    # Página da última release: serve para qualquer versão e arquitetura, e o nome do arquivo muda a cada versão
+    Write-Host '   ' -NoNewline
+    Write-Host 'Official Download:' -ForegroundColor White -NoNewline
+    Write-Host ' https://github.com/rustdesk/rustdesk/releases/latest' -ForegroundColor Green
 
-Write-Host '   ' -NoNewline
-Write-Host 'Report Issues:' -ForegroundColor White -NoNewline
-Write-Host ' https://github.com/wevertonmbrtx/rustdesk/issues' -ForegroundColor Green
-Write-Host ''
+    Write-Host '   ' -NoNewline
+    Write-Host 'Script Repository:' -ForegroundColor White -NoNewline
+    Write-Host ' https://github.com/wevertonmbrtx/rustdesk' -ForegroundColor Green
+
+    Write-Host '   ' -NoNewline
+    Write-Host 'Report Issues:' -ForegroundColor White -NoNewline
+    Write-Host ' https://github.com/wevertonmbrtx/rustdesk/issues' -ForegroundColor Green
+    Write-Host ''
+}
 
 # [Net.SecurityProtocolType]::Tls12 não existe no .NET 3.5 (PowerShell 2.0 do Windows 7).
 # Usa o valor numérico (3072) e segue em frente se o .NET não suportar: o Save-Url tem fallback.
@@ -32,9 +39,9 @@ $iconDir   = Join-Path $env:LOCALAPPDATA 'RustDeskLauncher'
 $iconPath  = Join-Path $iconDir 'rustdesk.ico'
 $lnkPath   = Join-Path $desktop 'RustDesk.lnk'
 $batchPath = Join-Path $env:TEMP 'initrd.bat'
-$progPath  = Join-Path $env:TEMP 'progress.ps1'
 $doneFlag  = Join-Path $env:TEMP 'rustdesk_done.txt'
 $portableDir = Join-Path $env:LOCALAPPDATA 'RustDesk'
+$installedExes = @("$env:ProgramFiles\RustDesk\rustdesk.exe", "${env:ProgramFiles(x86)}\RustDesk\rustdesk.exe")
 $batchUrl  = 'https://wevertonmbrtx.github.io/rustdesk/initrd.bat'
 $launcherUrl = 'https://wevertonmbrtx.github.io/rustdesk/launcher.ps1'
 # Ícone baixado a cada execução do repositório oficial do RustDesk (o rustdesk.exe portátil é
@@ -87,7 +94,7 @@ if (-not $iconOk) { Write-Warning "Can't download icon" }
 # O atalho só chama este launcher, o único orquestrador. Baixa pelo WinINet (MSXML2), que faz TLS 1.2
 # em qualquer Windows, inclusive com o PowerShell 2.0 do Windows 7.
 $cmd     = '%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe'
-$dl      = '$x=New-Object -Com MSXML2.XMLHTTP;$x.open(''GET'',''' + $launcherUrl + ''',$false);$x.send();iex $x.responseText'
+$dl      = '$rdShortcut=1;$x=New-Object -Com MSXML2.XMLHTTP;$x.open(''GET'',''' + $launcherUrl + ''',$false);$x.send();iex $x.responseText'
 $lnkArgs = '-NoProfile -ExecutionPolicy Bypass -Command "' + $dl + '"'
 
 try {
@@ -113,6 +120,20 @@ try {
 
 Remove-Item $doneFlag -Force -ErrorAction SilentlyContinue
 Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$batchPath`""
+
+# RustDesk instalado: não há cópia portátil para apagar, e o initrd.bat apaga a si mesmo ao terminar.
+if ((Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue) -or (Test-Path $installedExes[0]) -or (Test-Path $installedExes[1])) { return }
+
+# Modo portátil: esta janela fica visível porque é ela que apaga a cópia quando o RustDesk fechar.
+# No atalho ela fica pequena e diz o que está fazendo; no comando digitado, a janela é a do próprio usuário.
+if ($rdShortcut) {
+    try {
+        $sz = New-Object System.Management.Automation.Host.Size(62, 2)
+        $host.UI.RawUI.WindowSize = $sz
+        $host.UI.RawUI.BufferSize = $sz
+    } catch {}
+    Write-Host 'Feche o RustDesk quando terminar. Esta janela fecha sozinha.'
+}
 
 # Espera o initrd.bat avisar que terminou: instalar dependências pode demorar, e um reinício encerra
 # esta janela. Sem o aviso (UAC recusado, erro), sai sem apagar nada: a próxima execução grava por cima.
@@ -143,18 +164,6 @@ try {
     Remove-Item (Join-Path $portableDir 'rustdesk.exe') -Force -ErrorAction Stop
     Remove-Item $portableDir -Recurse -Force -ErrorAction SilentlyContinue
 } catch {}
-
-for ($i = 0; $i -lt 30; $i++) {
-    if (-not (Test-Path $batchPath)) { break }
-    try {
-        Remove-Item $batchPath -Force -ErrorAction Stop
-        break
-    } catch {
-        Start-Sleep -Seconds 2
-    }
-}
-
-Remove-Item $progPath -Force -ErrorAction SilentlyContinue
 
 if (-not (Test-Path $lnkPath)) {
     Write-Warning "Can't find $lnkPath"

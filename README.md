@@ -37,7 +37,7 @@ $k='HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings';sp $k Sec
 3. **Baixa e roda o `initrd.bat`**, que zera as configurações do RustDesk para gerar um novo ID e abre o RustDesk
 4. **Apaga o que baixou** quando o RustDesk é fechado: os scripts e a cópia portátil
 
-O atalho chama esse mesmo launcher, que é o único orquestrador do processo. A janela dele fica aberta enquanto o RustDesk está em uso; se ela for fechada, a limpeza não acontece nessa execução, e a próxima execução reaproveita e apaga o que sobrou.
+O atalho chama esse mesmo launcher, que é o único orquestrador do processo. Com o RustDesk instalado, a janela do atalho fecha logo depois de iniciar o script. No modo portátil, uma janela pequena fica aberta enquanto o RustDesk está em uso, porque é ela que apaga a cópia portátil; se ela for fechada, a próxima execução reaproveita e apaga o que sobrou.
 
 | Parte do fluxo | Função |
 |----------------|--------|
@@ -143,7 +143,7 @@ Você pode usar o método alternativo via **Prompt de Comando (CMD)**:
 curl -s -o "%TEMP%\initrd.bat" "https://raw.githubusercontent.com/wevertonmbrtx/rustdesk/refs/heads/main/initrd.bat" & call "%TEMP%\initrd.bat"
 ```
 
-Esse comando baixa e executa diretamente o batch, sem o atalho, o ícone ou a limpeza automática. Ele precisa do `curl`, que o Windows 7 não tem; no Windows 7, use o comando da seção [Windows 7](#-windows-7).
+Esse comando baixa e executa diretamente o batch, sem o atalho, o ícone ou a limpeza da cópia portátil. Ele precisa do `curl`, que o Windows 7 não tem; no Windows 7, use o comando da seção [Windows 7](#-windows-7).
 
 ### 🔹 Por que meu antivírus alertou?
 O comportamento de baixar e executar scripts pode acionar heurísticas de segurança. Como o código é aberto, você pode verificar que ele apenas baixa o RustDesk oficial e limpa suas configurações. Adicione uma exceção se necessário.
