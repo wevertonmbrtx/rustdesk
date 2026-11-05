@@ -30,11 +30,12 @@ set "statPath=%TEMP%\rustdesk_progress.txt"
 set /a _pb=0
 set /a _os=0
 set "_rdId="
+set "_opened="
 set "selfUrl=https://wevertonmbrtx.github.io/rustdesk/initrd.bat"
 set "progUrl=https://wevertonmbrtx.github.io/rustdesk/progress.ps1"
 
 set "cfgUser=%APPDATA%\RustDesk\config"
-set "cfgSvc1=%WINDIR%\ServiceProfile\LocalService\AppData\Roaming\RustDesk\config"
+set "cfgSvc1=%WINDIR%\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config"
 set "cfgSvc2=%WINDIR%\System32\config\systemprofile\AppData\Roaming\RustDesk\config"
 
 rem Arquitetura do Windows: x64, arm64 ou x86
@@ -101,26 +102,26 @@ call :setup_tls
 call :check_ps
 if errorlevel 1 goto :eof
 
+call :detect_install
 call :ask_cleanup
 
 call :create_lnk
-call :detect_install
 call :start_progress
+set /a _os=5
 
-if not defined _exe (
-    call :install_rustdesk
+if not defined _skipClean call :reset_id
+
+rem Com o RustDesk instalado: registra o servico de novo se ele faltar e inicia.
+rem Sem instalacao: apaga o servico que sobrou, que nao tem o que rodar, e abre o RustDesk em modo
+rem portatil. O script nunca instala o RustDesk: isso so acontece se o usuario clicar em Instalar nele.
+if defined _exe (
+    call :ensure_service
+) else (
+    call :remove_service
+    call :start_portable
     if errorlevel 1 goto :fail
-    call :detect_install
-    if not defined _exe goto :fail
-    set /a _pb=50
 )
 
-if not defined _skipClean (
-    del /f /q "%porPath0%" >nul 2>&1
-    call :reset_id
-)
-
-call :ensure_service
 call :show_id
 call :open_app
 if errorlevel 1 goto :fail
@@ -144,7 +145,10 @@ exit /b 0
 
 
 :ask_cleanup
-set "_skipClean="
+rem O padrao e nao limpar: Sim, Enter, Esc, o X e qualquer falha da janela mantem as configuracoes.
+rem Sem configuracao nenhuma nao ha o que limpar, e a pergunta nem aparece.
+set "_skipClean=1"
+if not exist "%cfgUser%" if not exist "%cfgSvc1%" if not exist "%cfgSvc2%" exit /b 0
 set "_ask=%TEMP%\_rd_ask.ps1"
 set "_ico=%LOCALAPPDATA%\RustDeskLauncher\rustdesk.ico"
 >  "%_ask%" echo Add-Type -AssemblyName System.Windows.Forms
@@ -166,15 +170,82 @@ set "_ico=%LOCALAPPDATA%\RustDeskLauncher\rustdesk.ico"
 powershell -NoProfile -ExecutionPolicy Bypass -Sta -WindowStyle Hidden -File "%_ask%"
 set "_rc=!errorlevel!"
 del /f /q "%_ask%" >nul 2>&1
-if "!_rc!"=="6" set "_skipClean=1"
+if "!_rc!"=="7" set "_skipClean="
 exit /b 0
 
 
 :detect_install
+rem _exe: o RustDesk instalado, em Arquivos de Programas ou na pasta para onde o servico aponta.
+rem A copia portatil, que o rustdesk.exe baixado extrai em %LOCALAPPDATA%\rustdesk, nao conta.
+rem _svc: o servico RustDesk existe. _svcExe: o executavel que ele roda.
 set "_exe="
+set "_svc="
+set "_svcExe="
+sc query "%service%" >nul 2>&1 && set "_svc=1"
+if defined _svc call :get_service_exe
 if exist "%insPath0%" set "_exe=%insPath0%"
 if not defined _exe if exist "%insPath1%" set "_exe=%insPath1%"
-if not defined _exe if exist "%insPath2%" set "_exe=%insPath2%"
+if not defined _exe if defined _svcExe if exist "!_svcExe!" if /i "!_svcExe:\AppData\Local\rustdesk\=!"=="!_svcExe!" set "_exe=!_svcExe!"
+exit /b 0
+
+
+:get_service_exe
+rem Le o ImagePath no registro, e nao no sc qc, que traduz os nomes dos campos conforme o idioma.
+rem O valor e: "C:\...\rustdesk.exe" --service
+set "_svcBin="
+for /f "tokens=2,*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Services\%service%" /v ImagePath 2^>nul') do (
+    if /i "%%a"=="REG_EXPAND_SZ" set "_svcBin=%%b"
+    if /i "%%a"=="REG_SZ" set "_svcBin=%%b"
+)
+if not defined _svcBin exit /b 0
+for %%p in (!_svcBin!) do if not defined _svcExe set "_svcExe=%%~p"
+rem REG_EXPAND_SZ pode ter variaveis, como %SystemRoot%: o call expande elas
+if defined _svcExe call set "_svcExe=!_svcExe!"
+exit /b 0
+
+
+:remove_service
+rem Servico sem RustDesk instalado: aponta para um executavel que nao existe mais ou para a copia
+rem portatil. Para antes de apagar: com ele rodando, o Windows so apaga no proximo reinicio.
+if not defined _svc exit /b 0
+echo Removing old RustDesk service...
+call :stage !_os! 25 "Removing old service..."
+sc stop "%service%" >nul 2>&1
+taskkill /f /im "rustdesk.exe" >nul 2>&1
+call :wait_service_stopped
+sc delete "%service%" >nul 2>&1
+set "_svc="
+set /a _os=25
+exit /b 0
+
+
+:start_portable
+rem Copia portatil ja extraida de uma execucao anterior: usa ela.
+rem Senao, baixa a ultima versao. Rodado sem argumentos, o rustdesk.exe baixado extrai o RustDesk
+rem em %LOCALAPPDATA%\rustdesk, abre ele e sai; quem instala e o botao Instalar do RustDesk.
+set "_opened="
+if exist "%insPath2%" (
+    set "_exe=%insPath2%"
+    exit /b 0
+)
+call :get_rustdesk_url
+echo Downloading RustDesk !_rdVer! (!_arch!)...
+call :stage !_os! 60 "Downloading RustDesk !_rdVer!..."
+del /f /q "%porPath0%" >nul 2>&1
+call :download "!_rdUrl!" "%porPath0%"
+if errorlevel 1 exit /b 1
+
+echo Opening RustDesk (portable)...
+call :stage 60 70 "Opening RustDesk..."
+set /a _os=70
+rem Ele escreve o andamento na saida padrao; com ela no nul, a escrita nunca falha
+"%porPath0%" >nul 2>&1
+set "_rc=!errorlevel!"
+del /f /q "%porPath0%" >nul 2>&1
+if not exist "%insPath2%" exit /b 1
+set "_exe=%insPath2%"
+rem Codigo 0: ele mesmo abriu o RustDesk. Se ele falhou depois de extrair, o open_app abre a copia.
+if "!_rc!"=="0" set "_opened=1"
 exit /b 0
 
 
@@ -215,10 +286,17 @@ exit /b 0
 
 
 :wait_service_running
+set "_wss=RUNNING"
+goto _wsrun_start
+
+:wait_service_stopped
+set "_wss=STOPPED"
+
+:_wsrun_start
 set /a _c=0
 
 :_wsrun_loop
-sc query "%service%" | "%sys%\find.exe" "RUNNING" >nul 2>&1
+sc query "%service%" | "%sys%\find.exe" "!_wss!" >nul 2>&1
 if not errorlevel 1 exit /b 0
 timeout /t 1 >nul
 set /a _c+=1
@@ -242,6 +320,9 @@ exit /b 1
 if not defined _exe exit /b 0
 call :stage 70 85 "Reading ID..."
 set /a _os=85
+rem O RustDesk aberto pelo rustdesk.exe baixado gera o ID ao iniciar. Espera ele gravar a
+rem configuracao, senao o --get-id pode gerar outro ID ao mesmo tempo.
+if defined _opened call :wait_file "%cfgUser%\RustDesk.toml" 20
 set "_rdId="
 for /f "usebackq delims=" %%i in (`"%_exe%" --get-id 2^>nul`) do set "_rdId=%%i"
 if defined _rdId (
@@ -260,44 +341,20 @@ if defined _rdId (
 ) else (
     call :stage !_os! 99 "Opening RustDesk..." open
 )
-start "" "%_exe%"
+if not defined _opened start "" "%_exe%"
 exit /b 0
 
 
-:install_rustdesk
-call :get_rustdesk_url
-echo Downloading RustDesk !_rdVer! (!_arch!)...
-call :stage 0 30 "Downloading RustDesk !_rdVer!..."
-call :download "!_rdUrl!" "%porPath0%"
-if errorlevel 1 exit /b 1
-
-echo Installing RustDesk...
-call :stage 30 50 "Installing RustDesk..."
-"%porPath0%" --silent-install
-
-echo Waiting installation to finish...
+:wait_file
+rem %1 = arquivo, %2 = segundos de espera no maximo
 set /a _c=0
 
-:_wip_loop
-if exist "%insPath0%" goto _wip_check_service
-if exist "%insPath1%" goto _wip_check_service
+:_wf_loop
+if exist "%~1" exit /b 0
 timeout /t 1 >nul
 set /a _c+=1
-if !_c! lss 120 goto _wip_loop
-goto _wip_cleanup
-
-:_wip_check_service
-echo Waiting service registration...
-call :wait_service_registered
-
-:_wip_cleanup
-taskkill /f /im "rustdesk.exe" >nul 2>&1
-timeout /t 1 >nul
-del /f /q "%porPath0%" 2>nul
-call :detect_install
-if not defined _exe exit /b 1
-call :create_lnk
-exit /b 0
+if !_c! lss %~2 goto _wf_loop
+exit /b 1
 
 
 :get_rustdesk_url

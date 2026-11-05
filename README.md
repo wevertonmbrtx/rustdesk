@@ -1,8 +1,8 @@
 # 🚀 RustDesk Reset – Execução Super Rápida (via PowerShell)
 
-> **Um único comando** que cria um atalho na área de trabalho com o ícone oficial do RustDesk, instala o RustDesk se necessário e gera um novo ID – sem passos manuais.
+> **Um único comando** que cria um atalho na área de trabalho com o ícone oficial do RustDesk, gera um novo ID e abre o RustDesk – o instalado ou, se não houver, a versão portátil – sem passos manuais.
 
-> ⚠️ **Projeto não oficial.** Este repositório não tem vínculo com o RustDesk nem com a empresa que o desenvolve, e não é endossado por eles. "RustDesk" e o logo do RustDesk são marcas dos seus donos. O script não modifica nem redistribui o RustDesk: ele baixa e instala o RustDesk oficial direto das [releases do projeto no GitHub](https://github.com/rustdesk/rustdesk/releases).
+> ⚠️ **Projeto não oficial.** Este repositório não tem vínculo com o RustDesk nem com a empresa que o desenvolve, e não é endossado por eles. "RustDesk" e o logo do RustDesk são marcas dos seus donos. O script não modifica nem redistribui o RustDesk: quando ele não está instalado, o script baixa o RustDesk oficial direto das [releases do projeto no GitHub](https://github.com/rustdesk/rustdesk/releases) e o abre em modo portátil.
 
 ---
 
@@ -27,7 +27,7 @@ $k='HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings';sp $k Sec
 - Ele liga o TLS 1.2 do Internet Explorer para o seu usuário e baixa o launcher por ele, sem depender de atualizações do .NET.
 - Requer o **Windows 7 SP1**.
 - Na primeira execução, o script instala o **.NET Framework 4.5.2** e o **WMF 5.0** (PowerShell 5) e **reinicia o computador**, às vezes duas vezes. Depois do login ele continua sozinho.
-- No Windows 7 é instalada a versão **sciter** (32 bits) do RustDesk, que roda em Windows 7 de 32 e de 64 bits.
+- No Windows 7 é usada a versão **sciter** (32 bits) do RustDesk, que roda em Windows 7 de 32 e de 64 bits.
 - Depois disso, o atalho da Área de Trabalho funciona normalmente.
 
 ### 🔹 O que este comando faz (em segundos):
@@ -36,16 +36,16 @@ $k='HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings';sp $k Sec
 2. **Cria o atalho `RustDesk.lnk`** na sua Área de Trabalho com o ícone oficial
 3. **Executa o atalho** automaticamente (como se você desse um clique duplo)
 
-O atalho, por sua vez, contém o comando que **baixa e roda o script `initrd.bat`**, responsável por instalar o RustDesk (se ainda não estiver) e zerar as configurações para gerar um novo ID.
+O atalho, por sua vez, contém o comando que **baixa e roda o script `initrd.bat`**, que zera as configurações do RustDesk para gerar um novo ID e abre o RustDesk.
 
 | Parte do fluxo | Função |
 |----------------|--------|
 | `irm da.gd/wgitrd \| iex` | Comando único que dispara todo o processo |
 | `launcher.ps1` | Script que monta o ambiente (atalho + ícone) |
 | `RustDesk.lnk` | Atalho que executa o reset via `cmd` |
-| `initrd.bat` | Script batch que instala/reseta o RustDesk |
+| `initrd.bat` | Script batch que reseta e abre o RustDesk |
 
-> ✅ **Ícone original** • ✅ **Instalação silenciosa** • ✅ **Não requer permissão de admin para criar o atalho**  
+> ✅ **Ícone original** • ✅ **Modo portátil, sem instalar nada** • ✅ **Não requer permissão de admin para criar o atalho**  
 > ⚠️ *O batch que roda em seguida solicitará elevação automaticamente se necessário.*
 
 ---
@@ -54,21 +54,34 @@ O atalho, por sua vez, contém o comando que **baixa e roda o script `initrd.bat
 
 ```mermaid
 graph TD
-    A[Início] --> B{RustDesk instalado?}
-    B -->|Sim| C[Para serviço + limpa configs]
-    B -->|Não| D[Baixa a última release]
-    D --> E[Instala em modo silencioso]
-    E --> C
-    C --> F[Reinicia serviço]
-    F --> G[Exibe NOVO ID]
-    G --> H[Abre interface do RustDesk]
-    H --> I[Limpeza final]
+    A[Início] --> B{Existe configuração<br/>do RustDesk?}
+    B -->|Não| E{RustDesk instalado?}
+    B -->|Sim| C{Iniciar sem limpar<br/>as configurações?}
+    C -->|Sim - padrão| E
+    C -->|Não| D[Para o RustDesk e apaga<br/>as configurações: novo ID]
+    D --> E
+    E -->|Sim| F{Serviço existe?}
+    F -->|Não| G[Registra o serviço]
+    F -->|Sim| H[Inicia o serviço]
+    G --> H
+    H --> M[Exibe o ID]
+    E -->|Não| I{Serviço existe?}
+    I -->|Sim| J[Para e apaga o serviço]
+    I -->|Não| K{Cópia portátil<br/>já extraída?}
+    J --> K
+    K -->|Sim| M
+    K -->|Não| L[Baixa a última release<br/>e abre em modo portátil]
+    L --> M
+    M --> N[Abre o RustDesk]
 ```
+
+> "Instalado" é o RustDesk em Arquivos de Programas, ou na pasta para onde o serviço aponta. A cópia portátil em `%LOCALAPPDATA%\rustdesk` não conta. O script nunca instala o RustDesk: a instalação só acontece se o usuário clicar em **Instalar** dentro do RustDesk.
 
 ### ✨ Funcionalidades do batch:
 - 🔐 **Elevação automática**: solicita privilégios de administrador se necessário
-- 📥 **Instalação silenciosa**: baixa a última versão do GitHub e roda `--silent-install`
-- 🔄 **Reset de configurações**: remove os arquivos de config do RustDesk para gerar novo ID
+- 📦 **Modo portátil**: sem RustDesk instalado, baixa a última versão do GitHub e a abre sem instalar
+- 🛠️ **Serviço consistente**: com o RustDesk instalado, registra o serviço de novo se ele faltar; sem instalação, apaga o serviço que sobrou
+- 🔄 **Reset de configurações**: remove os arquivos de config do RustDesk para gerar novo ID. Quando já existe configuração, o script pergunta antes; o padrão (Sim, Enter, Esc ou fechar a janela) é **não** limpar
 - 🆔 **Exibe o novo ID**: obtido via `rustdesk --get-id` e também visível na janela do RustDesk
 - 🌐 **Download inteligente**: tenta `curl` → `PowerShell` → `certutil` → `VBScript` como fallback
 - 🪟 **Windows 7**: instala .NET 4.5.2 + WMF 5.0 quando falta o PowerShell 3+, habilita o TLS 1.2 e usa a build sciter do RustDesk
@@ -108,18 +121,18 @@ graph TD
 ## ❓ Perguntas Frequentes
 
 ### 🔹 Preciso instalar alguma coisa manualmente?
-**Não.** O script baixa o instalador oficial do RustDesk (última release do GitHub) e o instala em modo silencioso. O launcher usa apenas recursos nativos do Windows: `PowerShell`, `cmd`, `certutil`.
+**Não.** Se o RustDesk não estiver instalado, o script baixa a versão oficial (última release do GitHub) e a abre em modo portátil. Para instalar, clique em **Instalar** dentro do RustDesk. O launcher usa apenas recursos nativos do Windows: `PowerShell`, `cmd`, `certutil`.
 
 ### 🔹 É seguro usar `irm ... | iex`?
 - ✅ O script está neste repositório público e você pode inspecioná‑lo: [wevertonmbrtx/rustdesk](https://github.com/wevertonmbrtx/rustdesk)
 - ✅ O comando usa TLS 1.2 e valida o certificado do GitHub
-- ✅ O instalador vem direto do repositório oficial [rustdesk/rustdesk](https://github.com/rustdesk/rustdesk/releases)
+- ✅ O RustDesk vem direto do repositório oficial [rustdesk/rustdesk](https://github.com/rustdesk/rustdesk/releases)
 - ⚠️ Sempre revise qualquer script antes de executá‑lo, especialmente se for com privilégios elevados
 
 ### 🔹 De onde vem o ícone?
 Do repositório oficial do RustDesk ([`res/icon.ico`](https://github.com/rustdesk/rustdesk/blob/master/res/icon.ico)). Ele é baixado **a cada execução** para `%LOCALAPPDATA%\RustDeskLauncher\rustdesk.ico`, então acompanha as mudanças do RustDesk. O atalho e as janelas do script usam esse arquivo.
 
-O ícone não é tirado do `rustdesk.exe` porque a versão portátil é apagada depois do uso. O logo é marca do RustDesk, por isso este repositório não guarda uma cópia dele: se o arquivo oficial mudar de lugar, o atalho é criado sem ícone até a URL ser atualizada aqui. O Flathub, usado antes, tem o mesmo logo, mas não aceita as conexões TLS do Windows 7.
+O ícone não é tirado do `rustdesk.exe` porque o atalho é criado antes de o RustDesk existir no PC, e o arquivo baixado é apagado depois do uso. O logo é marca do RustDesk, por isso este repositório não guarda uma cópia dele: se o arquivo oficial mudar de lugar, o atalho é criado sem ícone até a URL ser atualizada aqui. O Flathub, usado antes, tem o mesmo logo, mas não aceita as conexões TLS do Windows 7.
 
 ### 🔹 E se o PowerShell estiver bloqueado por política?
 Você pode usar o método alternativo via **Prompt de Comando (CMD)**:
@@ -157,7 +170,7 @@ O comportamento de baixar e executar scripts pode acionar heurísticas de segura
 
 Os scripts deste repositório (`initrd.bat`, `launcher.ps1` e `progress.ps1`) estão sob a [licença MIT](LICENSE).
 
-O RustDesk é um projeto separado, distribuído pelos seus autores sob a [AGPL-3.0](https://github.com/rustdesk/rustdesk/blob/master/LICENCE). O nome e o logo do RustDesk pertencem aos seus donos. Este repositório não inclui código nem imagens do RustDesk: o instalador e o ícone são baixados das fontes oficiais na hora do uso.
+O RustDesk é um projeto separado, distribuído pelos seus autores sob a [AGPL-3.0](https://github.com/rustdesk/rustdesk/blob/master/LICENCE). O nome e o logo do RustDesk pertencem aos seus donos. Este repositório não inclui código nem imagens do RustDesk: o RustDesk e o ícone são baixados das fontes oficiais na hora do uso.
 
 ---
 
