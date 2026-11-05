@@ -6,21 +6,21 @@ Write-Host 'Disclaimer:' -ForegroundColor Cyan -NoNewline
 Write-Host ' This script is not affiliated with or endorsed by RustDesk.' -ForegroundColor White
 
 # Texto secundário em cinza para dar contraste e legibilidade
-Write-Host '   It does not modify or redistribute the software; it only downloads the official version' -ForegroundColor Gray
-Write-Host '   from GitHub and runs it in portable mode if not installed.' -ForegroundColor Gray
+Write-Host '   It does not modify or redistribute the software; it only downloads the ' -ForegroundColor Gray
+Write-Host '   official version from GitHub and runs it in portable mode if not installed.' -ForegroundColor Gray
 
 # Marca em destaque
 Write-Host '   ' -NoNewline
 Write-Host 'RustDesk' -ForegroundColor Cyan -NoNewline
-Write-Host "$([char]0x2122) is a trademark of its respective owner." -ForegroundColor Gray
+Write-Host "is a trademark of its respective owner." -ForegroundColor Gray
 
 Write-Host '   ' -NoNewline
 Write-Host 'Script Repository:' -ForegroundColor White -NoNewline
-Write-Host ' https://github.com/wevertonmbrtx/rustdesk' -ForegroundColor Blue
+Write-Host ' https://github.com/wevertonmbrtx/rustdesk' -ForegroundColor Green
 
 Write-Host '   ' -NoNewline
 Write-Host 'Report Issues:' -ForegroundColor White -NoNewline
-Write-Host ' https://github.com/wevertonmbrtx/rustdesk/issues' -ForegroundColor Blue
+Write-Host ' https://github.com/wevertonmbrtx/rustdesk/issues' -ForegroundColor Green
 Write-Host ''
 
 # [Net.SecurityProtocolType]::Tls12 não existe no .NET 3.5 (PowerShell 2.0 do Windows 7).
