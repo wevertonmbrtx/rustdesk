@@ -37,13 +37,13 @@ $k='HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings';sp $k Sec
 3. **Baixa e roda o `initrd.bat`**, que zera as configurações do RustDesk para gerar um novo ID e abre o RustDesk
 4. **Apaga o que baixou**: os scripts ao terminar, e a cópia portátil quando o RustDesk é fechado
 
-O atalho chama esse mesmo launcher, que é o único orquestrador do processo. A janela do atalho fecha logo depois de iniciar o script, então nada fica esperando o RustDesk fechar: pelo atalho, a cópia portátil continua no computador e é apagada no próximo uso. Se a janela do PowerShell do comando digitado for fechada antes da limpeza, o mesmo acontece.
+O atalho chama esse mesmo launcher, que é o único orquestrador do processo. Pelo atalho, as janelas do PowerShell e do cmd ficam ocultas e só a barra de progresso aparece, além do pedido de permissão do Windows (UAC) e da pergunta sobre limpar as configurações, quando houver o que limpar. Nada fica esperando o RustDesk fechar: pelo atalho, a cópia portátil continua no computador e é apagada no próximo uso. Se a janela do PowerShell do comando digitado for fechada antes da limpeza, o mesmo acontece.
 
 | Parte do fluxo | Função |
 |----------------|--------|
 | `irm da.gd/wgitrd \| iex` | Comando único que dispara todo o processo |
 | `launcher.ps1` | Orquestrador: cria o atalho e o ícone, roda o `initrd.bat` e faz a limpeza |
-| `RustDesk.lnk` | Atalho que baixa e executa o `launcher.ps1` |
+| `RustDesk.lnk` | Atalho que abre o `run_hidden.vbs`, salvo em `%LOCALAPPDATA%\RustDeskLauncher`, que baixa e executa o `launcher.ps1` sem mostrar janela |
 | `initrd.bat` | Script batch que reseta e abre o RustDesk |
 
 > ✅ **Ícone original** • ✅ **Modo portátil, sem instalar nada** • ✅ **Não requer permissão de admin para criar o atalho**  

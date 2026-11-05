@@ -37,6 +37,7 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::S
 $desktop   = [Environment]::GetFolderPath('Desktop')
 $iconDir   = Join-Path $env:LOCALAPPDATA 'RustDeskLauncher'
 $iconPath  = Join-Path $iconDir 'rustdesk.ico'
+$vbsPath   = Join-Path $iconDir 'run_hidden.vbs'
 $lnkPath   = Join-Path $desktop 'RustDesk.lnk'
 $batchPath = Join-Path $env:TEMP 'initrd.bat'
 $runFlag   = Join-Path $env:TEMP 'rustdesk_running.txt'
@@ -93,15 +94,19 @@ if (-not $iconOk) { Write-Warning "Can't download icon" }
 
 # O atalho só chama este launcher, o único orquestrador. Baixa pelo WinINet (MSXML2), que faz TLS 1.2
 # em qualquer Windows, inclusive com o PowerShell 2.0 do Windows 7.
-$cmd     = '%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe'
-$dl      = '$rdShortcut=1;$x=New-Object -Com MSXML2.XMLHTTP;$x.open(''GET'',''' + $launcherUrl + ''',$false);$x.send();iex $x.responseText'
-$lnkArgs = '-NoProfile -ExecutionPolicy Bypass -Command "' + $dl + '"'
+$dl    = '$rdShortcut=1;$x=New-Object -Com MSXML2.XMLHTTP;$x.open(''GET'',''' + $launcherUrl + ''',$false);$x.send();iex $x.responseText'
+$psCmd = '%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "' + $dl + '"'
+
+# O atalho abre um .vbs porque o -WindowStyle Hidden do PowerShell ainda pisca o console antes de
+# esconder: o 0 no ws.Run já inicia o processo oculto. No VBScript, aspas dentro de string são "".
+$vbs = 'CreateObject("WScript.Shell").Run "' + $psCmd.Replace('"', '""') + '", 0, False'
 
 try {
+    [IO.File]::WriteAllText($vbsPath, $vbs)
     $ws  = New-Object -ComObject WScript.Shell
     $lnk = $ws.CreateShortcut($ws.SpecialFolders.Item('Desktop') + '\RustDesk.lnk')
-    $lnk.TargetPath  = $cmd
-    $lnk.Arguments   = $lnkArgs
+    $lnk.TargetPath  = '%SystemRoot%\System32\wscript.exe'
+    $lnk.Arguments   = '"' + $vbsPath + '"'
     $lnk.WindowStyle = 1
     $lnk.Description = 'RustDesk Reset'
     # Sempre o .ico baixado: o rustdesk.exe portátil é apagado depois do uso, e o instalado pode não existir
@@ -135,7 +140,9 @@ Remove-Portable
 $installed = (Get-Service -Name 'RustDesk' -ErrorAction SilentlyContinue) -or (Test-Path $installedExes[0]) -or (Test-Path $installedExes[1])
 $wait = (-not $rdShortcut) -and (-not $installed)
 if ($wait) { Set-Content -LiteralPath $runFlag -Value 'running' }
-Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$batchPath`""
+# Pelo atalho, o cmd do initrd.bat roda oculto: a única janela é a da barra de progresso, que ele abre à parte
+$cmdStyle = if ($rdShortcut) { 'Hidden' } else { 'Normal' }
+Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$batchPath`"" -WindowStyle $cmdStyle
 if (-not $wait) { return }
 
 # O initrd.bat apaga este aviso ao terminar. Instalar dependências pode demorar, e um reinício encerra
