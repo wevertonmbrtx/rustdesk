@@ -1,5 +1,15 @@
 $ErrorActionPreference = 'Stop'
 
+# O (TM) vai por [char]: o irm pode decodificar este arquivo com outra codificação
+Write-Host ''
+Write-Host '   Disclaimer: This script is not affiliated with or endorsed by RustDesk.'
+Write-Host '   It does not modify or redistribute the software; it only downloads the official version'
+Write-Host '   from GitHub and runs it in portable mode if not installed.'
+Write-Host ('   RustDesk' + [char]0x2122 + ' is a trademark of its respective owner.')
+Write-Host '   Script Repository: https://github.com/wevertonmbrtx/rustdesk'
+Write-Host '   Report Issues: https://github.com/wevertonmbrtx/rustdesk/issues'
+Write-Host ''
+
 # [Net.SecurityProtocolType]::Tls12 não existe no .NET 3.5 (PowerShell 2.0 do Windows 7).
 # Usa o valor numérico (3072) e segue em frente se o .NET não suportar: o Save-Url tem fallback.
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072 } catch {}
