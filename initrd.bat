@@ -334,7 +334,7 @@ set "_lnk=%TEMP%\_lnk.ps1"
 >> "%_lnk%" echo $icDir   = Join-Path $env:LOCALAPPDATA 'RustDeskLauncher'
 >> "%_lnk%" echo $lnkIcon = Join-Path $icDir 'rustdesk.ico'
 >> "%_lnk%" echo try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072 } catch {}
->> "%_lnk%" echo foreach ($u in @('https://raw.githubusercontent.com/rustdesk/rustdesk/master/res/icon.ico', 'https://wevertonmbrtx.github.io/rustdesk/rustdesk.ico')) {
+>> "%_lnk%" echo foreach ($u in @('https://raw.githubusercontent.com/rustdesk/rustdesk/master/res/icon.ico')) {
 >> "%_lnk%" echo     try {
 >> "%_lnk%" echo         $b = (New-Object Net.WebClient).DownloadData($u)
 >> "%_lnk%" echo         if ($b.Length -gt 6 -and $b[0] -eq 0 -and $b[1] -eq 0 -and $b[2] -eq 1 -and $b[3] -eq 0) {

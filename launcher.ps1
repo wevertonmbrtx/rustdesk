@@ -11,13 +11,12 @@ $lnkPath   = Join-Path $desktop 'RustDesk.lnk'
 $batchPath = Join-Path $env:TEMP 'initrd.bat'
 $progPath  = Join-Path $env:TEMP 'progress.ps1'
 $batchUrl  = 'https://wevertonmbrtx.github.io/rustdesk/initrd.bat'
-# Ícone externo, baixado a cada execução (o rustdesk.exe portátil é apagado depois do uso):
-# primeiro o do repositório oficial do RustDesk; a cópia deste repositório só entra se o
-# arquivo oficial mudar de lugar. O dl.flathub.org, usado antes, tem o mesmo logo, mas não
-# aceita nenhuma cifra TLS do Windows 7.
+# Ícone baixado a cada execução do repositório oficial do RustDesk (o rustdesk.exe portátil é
+# apagado depois do uso). O logo é marca do RustDesk, por isso este repositório não guarda uma
+# cópia: se o arquivo oficial mudar de lugar, o atalho fica sem ícone até a URL ser atualizada.
+# O dl.flathub.org, usado antes, tem o mesmo logo, mas não aceita nenhuma cifra TLS do Windows 7.
 $iconUrls  = @(
-    'https://raw.githubusercontent.com/rustdesk/rustdesk/master/res/icon.ico',
-    'https://wevertonmbrtx.github.io/rustdesk/rustdesk.ico'
+    'https://raw.githubusercontent.com/rustdesk/rustdesk/master/res/icon.ico'
 )
 
 function Get-UrlBytes([string]$Url) {

@@ -2,6 +2,8 @@
 
 > **Um único comando** que cria um atalho na área de trabalho com o ícone oficial do RustDesk, instala o RustDesk se necessário e gera um novo ID – sem passos manuais.
 
+> ⚠️ **Projeto não oficial.** Este repositório não tem vínculo com o RustDesk nem com a empresa que o desenvolve, e não é endossado por eles. "RustDesk" e o logo do RustDesk são marcas dos seus donos. O script não modifica nem redistribui o RustDesk: ele baixa e instala o RustDesk oficial direto das [releases do projeto no GitHub](https://github.com/rustdesk/rustdesk/releases).
+
 ---
 
 ## ⚡ Executar Agora (PowerShell)
@@ -117,7 +119,7 @@ graph TD
 ### 🔹 De onde vem o ícone?
 Do repositório oficial do RustDesk ([`res/icon.ico`](https://github.com/rustdesk/rustdesk/blob/master/res/icon.ico)). Ele é baixado **a cada execução** para `%LOCALAPPDATA%\RustDeskLauncher\rustdesk.ico`, então acompanha as mudanças do RustDesk. O atalho e as janelas do script usam esse arquivo.
 
-O ícone não é tirado do `rustdesk.exe` porque a versão portátil é apagada depois do uso. Se o arquivo oficial mudar de lugar, o script usa a cópia `rustdesk.ico` deste repositório como reserva. O Flathub, usado antes, tem o mesmo logo, mas não aceita as conexões TLS do Windows 7.
+O ícone não é tirado do `rustdesk.exe` porque a versão portátil é apagada depois do uso. O logo é marca do RustDesk, por isso este repositório não guarda uma cópia dele: se o arquivo oficial mudar de lugar, o atalho é criado sem ícone até a URL ser atualizada aqui. O Flathub, usado antes, tem o mesmo logo, mas não aceita as conexões TLS do Windows 7.
 
 ### 🔹 E se o PowerShell estiver bloqueado por política?
 Você pode usar o método alternativo via **Prompt de Comando (CMD)**:
@@ -148,6 +150,14 @@ O comportamento de baixar e executar scripts pode acionar heurísticas de segura
 
 - 📖 **Documentação oficial do RustDesk:**  
   [rustdesk.com](https://rustdesk.com/)
+
+---
+
+## 📄 Licença
+
+Os scripts deste repositório (`initrd.bat`, `launcher.ps1` e `progress.ps1`) estão sob a [licença MIT](LICENSE).
+
+O RustDesk é um projeto separado, distribuído pelos seus autores sob a [AGPL-3.0](https://github.com/rustdesk/rustdesk/blob/master/LICENCE). O nome e o logo do RustDesk pertencem aos seus donos. Este repositório não inclui código nem imagens do RustDesk: o instalador e o ícone são baixados das fontes oficiais na hora do uso.
 
 ---
 
