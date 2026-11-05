@@ -12,7 +12,21 @@ Copie e cole o comando abaixo em uma janela do **PowerShell**:
 irm da.gd/wgitrd | iex
 ```
 
-> 🔹 **Funciona em qualquer Windows 8.1+** – o PowerShell já vem instalado.
+> 🔹 **Funciona em qualquer Windows 8.1+** – o PowerShell já vem instalado. Para o **Windows 7**, veja abaixo.
+
+### 🪟 Windows 7
+
+O PowerShell 2.0 do Windows 7 não tem o `irm` e não faz TLS 1.2 sozinho. Use este comando **só no Windows 7**:
+
+```powershell
+$k='HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings';sp $k SecureProtocols ((gp $k).SecureProtocols -bor 2048);$x=New-Object -Com MSXML2.XMLHTTP;$x.open('GET','https://wevertonmbrtx.github.io/rustdesk/launcher.ps1',$false);$x.send();iex $x.responseText
+```
+
+- Ele liga o TLS 1.2 do Internet Explorer para o seu usuário e baixa o launcher por ele, sem depender de atualizações do .NET.
+- Requer o **Windows 7 SP1**.
+- Na primeira execução, o script instala o **.NET Framework 4.5.2** e o **WMF 5.0** (PowerShell 5) e **reinicia o computador**, às vezes duas vezes. Depois do login ele continua sozinho.
+- No Windows 7 é instalada a versão **sciter** (32 bits) do RustDesk, que roda em Windows 7 de 32 e de 64 bits.
+- Depois disso, o atalho da Área de Trabalho funciona normalmente.
 
 ### 🔹 O que este comando faz (em segundos):
 
@@ -54,7 +68,8 @@ graph TD
 - 📥 **Instalação silenciosa**: baixa a última versão do GitHub e roda `--silent-install`
 - 🔄 **Reset de configurações**: remove os arquivos de config do RustDesk para gerar novo ID
 - 🆔 **Exibe o novo ID**: obtido via `rustdesk --get-id` e também visível na janela do RustDesk
-- 🌐 **Download inteligente**: tenta `curl` → `certutil` → `VBScript` como fallback
+- 🌐 **Download inteligente**: tenta `curl` → `PowerShell` → `certutil` → `VBScript` como fallback
+- 🪟 **Windows 7**: instala .NET 4.5.2 + WMF 5.0 quando falta o PowerShell 3+, habilita o TLS 1.2 e usa a build sciter do RustDesk
 
 > ℹ️ **Diferença em relação ao AnyDesk:** o RustDesk guarda o ID nos arquivos de configuração (`RustDesk.toml`). Ao limpá-los, o RustDesk gera um **novo ID** e uma **nova senha de acesso temporária** ao reiniciar.
 
@@ -97,7 +112,9 @@ graph TD
 - ⚠️ Sempre revise qualquer script antes de executá‑lo, especialmente se for com privilégios elevados
 
 ### 🔹 De onde vem o ícone?
-O ícone oficial do RustDesk é baixado do Flathub (`dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.rustdesk.RustDesk.png`), convertido de PNG para `.ico` e salvo em `%LOCALAPPDATA%\RustDeskLauncher\rustdesk.ico`. O atalho aponta para esse arquivo.
+Do repositório oficial do RustDesk ([`res/icon.ico`](https://github.com/rustdesk/rustdesk/blob/master/res/icon.ico)). Ele é baixado **a cada execução** para `%LOCALAPPDATA%\RustDeskLauncher\rustdesk.ico`, então acompanha as mudanças do RustDesk. O atalho e as janelas do script usam esse arquivo.
+
+O ícone não é tirado do `rustdesk.exe` porque a versão portátil é apagada depois do uso. Se o arquivo oficial mudar de lugar, o script usa a cópia `rustdesk.ico` deste repositório como reserva. O Flathub, usado antes, tem o mesmo logo, mas não aceita as conexões TLS do Windows 7.
 
 ### 🔹 E se o PowerShell estiver bloqueado por política?
 Você pode usar o método alternativo via **Prompt de Comando (CMD)**:
@@ -106,7 +123,7 @@ Você pode usar o método alternativo via **Prompt de Comando (CMD)**:
 curl -s -o "%TEMP%\initrd.bat" "https://raw.githubusercontent.com/wevertonmbrtx/rustdesk/refs/heads/main/initrd.bat" & call "%TEMP%\initrd.bat"
 ```
 
-Esse comando baixa e executa diretamente o batch, sem o atalho ou o ícone.
+Esse comando baixa e executa diretamente o batch, sem o atalho ou o ícone. Ele precisa do `curl`, que o Windows 7 não tem; no Windows 7, use o comando da seção [Windows 7](#-windows-7).
 
 ### 🔹 Por que meu antivírus alertou?
 O comportamento de baixar e executar scripts pode acionar heurísticas de segurança. Como o código é aberto, você pode verificar que ele apenas baixa o RustDesk oficial e limpa suas configurações. Adicione uma exceção se necessário.

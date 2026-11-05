@@ -34,6 +34,10 @@ set "_arch=x86"
 if /i "%PROCESSOR_ARCHITECTURE%"=="AMD64" set "_arch=x64"
 if /i "%PROCESSOR_ARCHITEW6432%"=="AMD64" set "_arch=x64"
 
+rem Windows 7 / Server 2008 R2 = versao 6.1: ajustes de TLS, pre-requisitos e build do RustDesk
+set "_win7="
+ver | "%sys%\find.exe" " 6.1." >nul && set "_win7=1"
+
 for %%k in ("%~f0") do set "batchName=%%~nk"
 set "_elev=%TEMP%\elev_!batchName!.vbs"
 
@@ -45,13 +49,20 @@ if not errorlevel 1 goto got_privileges
 
 :get_privileges
 if "%~1"=="ELEV" (shift /1 & goto got_privileges)
+rem A janela elevada fica oculta, exceto no Windows 7 com PowerShell 2: nele os
+rem pre-requisitos sao instalados nessa janela, e erros param num pause.
+set "_show=0"
+if defined _win7 (
+    powershell -NoProfile -Command "exit ([int]$PSVersionTable.PSVersion.Major)" >nul 2>&1
+    if !errorlevel! LSS 3 set "_show=1"
+)
 >  "!_elev!" echo Set UAC = CreateObject^("Shell.Application"^)
 >> "!_elev!" echo args = "ELEV "
 >> "!_elev!" echo For Each strArg in WScript.Arguments
 >> "!_elev!" echo args = args ^& strArg ^& " "
 >> "!_elev!" echo Next
 >> "!_elev!" echo args = "/c """ + "!batchPath!" + """ " + args
->> "!_elev!" echo UAC.ShellExecute "%sys%\cmd.exe", args, "", "runas", 0
+>> "!_elev!" echo UAC.ShellExecute "%sys%\cmd.exe", args, "", "runas", !_show!
 "%sys%\WScript.exe" "!_elev!" %*
 exit /B
 
@@ -66,6 +77,19 @@ reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v4.0.30319" /v System
 reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v4.0.30319" /v SchUseStrongCrypto /t REG_DWORD /d 1 /f >nul 2>&1
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client" /v Enabled /t REG_DWORD /d 1 /f >nul 2>&1
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client" /v DisabledByDefault /t REG_DWORD /d 0 /f >nul 2>&1
+
+rem Windows 7: TLS 1.2 no WinINet, usado pelo download via VBS; no WinHTTP, usado pelo certutil,
+rem com o KB3140245; e no .NET 3.5, usado pelo PowerShell 2.0, com o KB3154518.
+rem So no Windows 7: no 8.1+ esses valores limitariam o TLS 1.3.
+if defined _win7 (
+    reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v SecureProtocols /t REG_DWORD /d 0x00000A80 /f >nul 2>&1
+    reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp" /v DefaultSecureProtocols /t REG_DWORD /d 0x00000A80 /f >nul 2>&1
+    reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp" /v DefaultSecureProtocols /t REG_DWORD /d 0x00000A80 /f >nul 2>&1
+    reg add "HKLM\SOFTWARE\Microsoft\.NETFramework\v2.0.50727" /v SystemDefaultTlsVersions /t REG_DWORD /d 1 /f >nul 2>&1
+    reg add "HKLM\SOFTWARE\Microsoft\.NETFramework\v2.0.50727" /v SchUseStrongCrypto /t REG_DWORD /d 1 /f >nul 2>&1
+    reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v2.0.50727" /v SystemDefaultTlsVersions /t REG_DWORD /d 1 /f >nul 2>&1
+    reg add "HKLM\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v2.0.50727" /v SchUseStrongCrypto /t REG_DWORD /d 1 /f >nul 2>&1
+)
 
 :run
 call :check_ps
@@ -272,12 +296,14 @@ exit /b 0
 
 :get_rustdesk_url
 set "_rdVer=1.4.9"
-for /f "usebackq" %%v in (`powershell -NoProfile -Command "try{(Invoke-RestMethod 'https://api.github.com/repos/rustdesk/rustdesk/releases/latest').tag_name}catch{'1.4.9'}" 2^>nul`) do set "_rdVer=%%v"
+for /f "usebackq" %%v in (`powershell -NoProfile -Command "try{[Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor 3072}catch{};try{(Invoke-RestMethod 'https://api.github.com/repos/rustdesk/rustdesk/releases/latest').tag_name}catch{'1.4.9'}" 2^>nul`) do set "_rdVer=%%v"
 if /i "!_arch!"=="x64" (
     set "_rdUrl=https://github.com/rustdesk/rustdesk/releases/download/!_rdVer!/rustdesk-!_rdVer!-x86_64.exe"
 ) else (
     set "_rdUrl=https://github.com/rustdesk/rustdesk/releases/download/!_rdVer!/rustdesk-!_rdVer!-x86-sciter.exe"
 )
+rem Windows 7: a build Flutter nao tem suporte garantido; a sciter de 32 bits roda em x86 e x64
+if defined _win7 set "_rdUrl=https://github.com/rustdesk/rustdesk/releases/download/!_rdVer!/rustdesk-!_rdVer!-x86-sciter.exe"
 exit /b 0
 
 
@@ -289,11 +315,25 @@ set "_lnk=%TEMP%\_lnk.ps1"
 >> "%_lnk%" echo $q   = [char]34
 >> "%_lnk%" echo $a   = [char]38
 >> "%_lnk%" echo $cmd = '%SystemRoot%\System32\cmd.exe'
->> "%_lnk%" echo $tmp = '%TEMP%\initrd.bat'
+>> "%_lnk%" echo $tmp = '%%TEMP%%\initrd.bat'
 >> "%_lnk%" echo if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
->> "%_lnk%" echo     $lnkArgs = '/c ' + $q + 'curl -s -o ' + $q + $tmp + $q + ' ' + $q + $url + $q + ' ' + $a + ' call ' + $q + $tmp + $q + $q
+>> "%_lnk%" echo     $lnkArgs = '/c ' + $q + 'curl -fsSL -o ' + $q + $tmp + $q + ' ' + $q + $url + $q + ' ' + $a + ' call ' + $q + $tmp + $q + $q
 >> "%_lnk%" echo } else {
->> "%_lnk%" echo     $lnkArgs = '/c ' + $q + 'certutil -urlcache -split -f ' + $q + $url + $q + ' ' + $q + $tmp + $q + ' ' + $a + ' ' + $q + $tmp + $q + $q
+>> "%_lnk%" echo     $dl = '[Net.ServicePointManager]::SecurityProtocol=3072;(New-Object Net.WebClient).DownloadFile(' + "'" + $url + "'" + ',$env:TEMP+' + "'\initrd.bat')"
+>> "%_lnk%" echo     $lnkArgs = '/c ' + $q + 'powershell -NoProfile -ExecutionPolicy Bypass -Command ' + $q + $dl + $q + ' ' + $a + ' call ' + $q + $tmp + $q + $q
+>> "%_lnk%" echo }
+>> "%_lnk%" echo $icDir   = Join-Path $env:LOCALAPPDATA 'RustDeskLauncher'
+>> "%_lnk%" echo $lnkIcon = Join-Path $icDir 'rustdesk.ico'
+>> "%_lnk%" echo try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072 } catch {}
+>> "%_lnk%" echo foreach ($u in @('https://raw.githubusercontent.com/rustdesk/rustdesk/master/res/icon.ico', 'https://wevertonmbrtx.github.io/rustdesk/rustdesk.ico')) {
+>> "%_lnk%" echo     try {
+>> "%_lnk%" echo         $b = (New-Object Net.WebClient).DownloadData($u)
+>> "%_lnk%" echo         if ($b.Length -gt 6 -and $b[0] -eq 0 -and $b[1] -eq 0 -and $b[2] -eq 1 -and $b[3] -eq 0) {
+>> "%_lnk%" echo             $null = [IO.Directory]::CreateDirectory($icDir)
+>> "%_lnk%" echo             [IO.File]::WriteAllBytes($lnkIcon, $b)
+>> "%_lnk%" echo             break
+>> "%_lnk%" echo         }
+>> "%_lnk%" echo     } catch {}
 >> "%_lnk%" echo }
 >> "%_lnk%" echo try {
 >> "%_lnk%" echo     $ws  = New-Object -ComObject WScript.Shell
@@ -303,8 +343,7 @@ set "_lnk=%TEMP%\_lnk.ps1"
 >> "%_lnk%" echo     $lnk.Arguments   = $lnkArgs
 >> "%_lnk%" echo     $lnk.WindowStyle = 1
 >> "%_lnk%" echo     $lnk.Description = 'RustDesk Reset'
->> "%_lnk%" echo     $ic = Join-Path $env:LOCALAPPDATA 'RustDeskLauncher\rustdesk.ico'
->> "%_lnk%" echo     if (Test-Path $ic) { $lnk.IconLocation = $ic + ',0' }
+>> "%_lnk%" echo     if (Test-Path -LiteralPath $lnkIcon) { $lnk.IconLocation = $lnkIcon + ',0' }
 >> "%_lnk%" echo     $lnk.Save()
 >> "%_lnk%" echo } catch {
 >> "%_lnk%" echo     Write-Warning "Can't create shortcut: $_"
@@ -327,10 +366,20 @@ set "_dlUrl=%~1"
 set "_dlOut=%~2"
 if exist "%_dlOut%" exit /b 0
 
-where curl >nul 2>&1 && curl -L -s --max-time 300 -o "%_dlOut%" "!_dlUrl!"
+where curl >nul 2>&1 && curl -f -L -s --max-time 300 -o "%_dlOut%" "!_dlUrl!"
 if exist "%_dlOut%" exit /b 0
 
+rem PowerShell: no Windows 7 e o metodo que faz TLS 1.2 depois do .NET 4.5 + WMF 5.
+rem Le URL e destino das variaveis de ambiente para nao quebrar com aspas no caminho.
+del /f /q "%_dlOut%.part" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';try{[Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor 3072}catch{};$p=$env:_dlOut+'.part';(New-Object Net.WebClient).DownloadFile($env:_dlUrl,$p);Move-Item -LiteralPath $p -Destination $env:_dlOut -Force" >nul 2>&1
+del /f /q "%_dlOut%.part" >nul 2>&1
+if exist "%_dlOut%" exit /b 0
+
+rem O certutil grava a pagina de erro mesmo com HTTP 404; o codigo de saida e negativo
 certutil -urlcache -split -f "!_dlUrl!" "%_dlOut%" >nul 2>&1
+if not "!errorlevel!"=="0" del /f /q "%_dlOut%" >nul 2>&1
+certutil -urlcache "!_dlUrl!" delete >nul 2>&1
 if exist "%_dlOut%" exit /b 0
 
 call :vbs_download "!_dlUrl!" "%_dlOut%"
@@ -351,6 +400,16 @@ set "_psver=%errorlevel%"
 if %_psver% GEQ 3 exit /b 0
 
 echo PowerShell %_psver%.x found. Version 3+ required.
+
+rem .NET 4.5.2 e WMF 5.0 exigem o Service Pack 1: o build 7600 e o Windows 7 sem SP1
+ver | "%sys%\find.exe" " 6.1.7600" >nul
+if not errorlevel 1 (
+    echo Windows 7 Service Pack 1 ^(KB976932^) is required.
+    echo Install it through Windows Update and run this again.
+    pause
+    exit /b 1
+)
+
 echo Preparing automatic setup of prerequisites...
 
 if /i not "!batchPath!"=="%selfPath%" copy /y "!batchPath!" "%selfPath%" >nul 2>&1
@@ -427,10 +486,11 @@ exit /B
 set "_vu=%~1"
 set "_vo=%~2"
 set "_vt=%TEMP%\_dl.vbs"
->  "%_vt%" echo Const T = 300000
->> "%_vt%" echo Set x = CreateObject("MSXML2.XMLHTTP")
+rem MSXML2.XMLHTTP usa o WinINet, que tem TLS 1.2 no Windows 7. Ele nao tem setTimeouts:
+rem esse metodo so existe no ServerXMLHTTP, e chama-lo abortava o script.
+rem Limite: nega redirecionamento para outro dominio, como o das releases do GitHub.
+>  "%_vt%" echo Set x = CreateObject("MSXML2.XMLHTTP")
 >> "%_vt%" echo x.Open "GET", WScript.Arguments(0), False
->> "%_vt%" echo x.setTimeouts T, T, T, T
 >> "%_vt%" echo x.Send
 >> "%_vt%" echo If x.Status = 200 Then
 >> "%_vt%" echo   Set s = CreateObject("ADODB.Stream")

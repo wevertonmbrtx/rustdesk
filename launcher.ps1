@@ -1,5 +1,8 @@
 $ErrorActionPreference = 'Stop'
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+# [Net.SecurityProtocolType]::Tls12 não existe no .NET 3.5 (PowerShell 2.0 do Windows 7).
+# Usa o valor numérico (3072) e segue em frente se o .NET não suportar: o Save-Url tem fallback.
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072 } catch {}
 
 $desktop   = [Environment]::GetFolderPath('Desktop')
 $iconDir   = Join-Path $env:LOCALAPPDATA 'RustDeskLauncher'
@@ -8,45 +11,55 @@ $lnkPath   = Join-Path $desktop 'RustDesk.lnk'
 $batchPath = Join-Path $env:TEMP 'initrd.bat'
 $progPath  = Join-Path $env:TEMP 'progress.ps1'
 $batchUrl  = 'https://wevertonmbrtx.github.io/rustdesk/initrd.bat'
-$iconUrl   = 'https://dl.flathub.org/repo/appstream/x86_64/icons/128x128/com.rustdesk.RustDesk.png'
+# Ícone externo, baixado a cada execução (o rustdesk.exe portátil é apagado depois do uso):
+# primeiro o do repositório oficial do RustDesk; a cópia deste repositório só entra se o
+# arquivo oficial mudar de lugar. O dl.flathub.org, usado antes, tem o mesmo logo, mas não
+# aceita nenhuma cifra TLS do Windows 7.
+$iconUrls  = @(
+    'https://raw.githubusercontent.com/rustdesk/rustdesk/master/res/icon.ico',
+    'https://wevertonmbrtx.github.io/rustdesk/rustdesk.ico'
+)
 
-$webClient = New-Object Net.WebClient
-$webClient.Headers.Add('User-Agent', 'Mozilla/5.0')
+function Get-UrlBytes([string]$Url) {
+    try {
+        $wc = New-Object Net.WebClient
+        $wc.Headers.Add('User-Agent', 'Mozilla/5.0')
+        return ,$wc.DownloadData($Url)
+    } catch {}
+    # Fallback WinINet (mesma pilha do Internet Explorer): faz TLS 1.2 no Windows 7 mesmo sem
+    # a atualização de TLS do .NET 3.5 que o WebClient do PowerShell 2.0 precisaria.
+    # Não segue redirecionamento para outro domínio, então use URLs finais.
+    $x = New-Object -ComObject MSXML2.XMLHTTP
+    $x.open('GET', $Url, $false)
+    $x.send()
+    if ($x.status -ne 200) { throw "HTTP $($x.status): $Url" }
+    return ,[byte[]]$x.responseBody
+}
+
+function Save-Url([string]$Url, [string]$Path) {
+    [IO.File]::WriteAllBytes($Path, (Get-UrlBytes $Url))
+}
 
 try {
     if (-not (Test-Path $iconDir)) {
         New-Item -ItemType Directory -Path $iconDir -Force | Out-Null
     }
-
-    $pngBytes = $webClient.DownloadData($iconUrl)
-
-    # Dimensões do PNG (cabeçalho IHDR, big-endian: largura no offset 16, altura no 20)
-    $width  = ($pngBytes[16] * 16777216) + ($pngBytes[17] * 65536) + ($pngBytes[18] * 256) + $pngBytes[19]
-    $height = ($pngBytes[20] * 16777216) + ($pngBytes[21] * 65536) + ($pngBytes[22] * 256) + $pngBytes[23]
-    if ($width  -ge 256) { $width  = 0 }
-    if ($height -ge 256) { $height = 0 }
-
-    # Empacota o PNG dentro de um ICO (o atalho do Windows exige .ico, não .png)
-    $icoBytes = New-Object System.Collections.Generic.List[byte]
-    $icoBytes.AddRange([System.BitConverter]::GetBytes([UInt16]0))   # reservado
-    $icoBytes.AddRange([System.BitConverter]::GetBytes([UInt16]1))   # tipo (1 = ícone)
-    $icoBytes.AddRange([System.BitConverter]::GetBytes([UInt16]1))   # nº de imagens
-    $icoBytes.Add([byte]$width)
-    $icoBytes.Add([byte]$height)
-    $icoBytes.Add([byte]0)                                           # cores da paleta
-    $icoBytes.Add([byte]0)                                           # reservado
-    $icoBytes.AddRange([System.BitConverter]::GetBytes([UInt16]1))   # planos
-    $icoBytes.AddRange([System.BitConverter]::GetBytes([UInt16]32))  # bits por pixel
-    $icoBytes.AddRange([System.BitConverter]::GetBytes([UInt32]$pngBytes.Length))
-    $icoBytes.AddRange([System.BitConverter]::GetBytes([UInt32]22))  # offset dos dados da imagem
-    $icoBytes.AddRange($pngBytes)
-
-    [System.IO.File]::WriteAllBytes($iconPath, $icoBytes.ToArray())
-} catch {
-    Write-Warning "Can't create icon: $_"
+} catch {}
+$iconOk = $false
+foreach ($u in $iconUrls) {
+    try {
+        $b = Get-UrlBytes $u
+        # Só aceita um .ico de verdade (cabeçalho 00 00 01 00), nunca uma página de erro
+        if ($b.Length -gt 6 -and $b[0] -eq 0 -and $b[1] -eq 0 -and $b[2] -eq 1 -and $b[3] -eq 0) {
+            [IO.File]::WriteAllBytes($iconPath, $b)
+            $iconOk = $true
+            break
+        }
+    } catch {}
 }
+if (-not $iconOk) { Write-Warning "Can't download icon" }
 
-$url = 'https://wevertonmbrtx.github.io/rustdesk/initrd.bat'
+$url = $batchUrl
 $q   = [char]34
 $a   = [char]38
 
@@ -54,9 +67,12 @@ $cmd = '%SystemRoot%\System32\cmd.exe'
 $tmp = '%TEMP%\initrd.bat'
 
 if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-    $lnkArgs = '/c ' + $q + 'curl -s -o ' + $q + $tmp + $q + ' ' + $q + $url + $q + ' ' + $a + ' call ' + $q + $tmp + $q + $q
+    $lnkArgs = '/c ' + $q + 'curl -fsSL -o ' + $q + $tmp + $q + ' ' + $q + $url + $q + ' ' + $a + ' call ' + $q + $tmp + $q + $q
 } else {
-    $lnkArgs = '/c ' + $q + 'certutil -urlcache -split -f ' + $q + $url + $q + ' ' + $q + $tmp + $q + ' ' + $a + ' ' + $q + $tmp + $q + $q
+    # Windows 7/8.1 não têm curl.exe, e o certutil não faz TLS 1.2 no Windows 7. O atalho baixa pelo
+    # PowerShell: o initrd.bat garante .NET 4.5 + PowerShell 5 antes de recriar este atalho.
+    $dl = '[Net.ServicePointManager]::SecurityProtocol=3072;(New-Object Net.WebClient).DownloadFile(' + "'" + $url + "'" + ',$env:TEMP+' + "'\initrd.bat')"
+    $lnkArgs = '/c ' + $q + 'powershell -NoProfile -ExecutionPolicy Bypass -Command ' + $q + $dl + $q + ' ' + $a + ' call ' + $q + $tmp + $q + $q
 }
 
 try {
@@ -66,14 +82,15 @@ try {
     $lnk.Arguments   = $lnkArgs
     $lnk.WindowStyle = 1
     $lnk.Description = 'RustDesk Reset'
-    if (Test-Path $iconPath) { $lnk.IconLocation = "$iconPath,0" }
+    # Sempre o .ico baixado: o rustdesk.exe portátil é apagado depois do uso, e o instalado pode não existir
+    if (Test-Path -LiteralPath $iconPath) { $lnk.IconLocation = "$iconPath,0" }
     $lnk.Save()
 } catch {
     Write-Warning "Can't create shortcut: $_"
 }
 
 try {
-    $webClient.DownloadFile($batchUrl, $batchPath)
+    Save-Url $batchUrl $batchPath
 } catch {
     Write-Warning "Can't download initrd.bat: $_"
     return
