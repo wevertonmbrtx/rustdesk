@@ -113,7 +113,6 @@ try {
 
 Remove-Item $doneFlag -Force -ErrorAction SilentlyContinue
 Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$batchPath`""
-Write-Host 'Ao fechar o RustDesk, esta janela faz a limpeza dos arquivos baixados.'
 
 # Espera o initrd.bat avisar que terminou: instalar dependências pode demorar, e um reinício encerra
 # esta janela. Sem o aviso (UAC recusado, erro), sai sem apagar nada: a próxima execução grava por cima.
